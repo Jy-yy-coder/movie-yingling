@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { guest, login, register, sms, setToken } from '../api'
+import { ensureGuest, login, register, sms, setToken } from '../api'
 
 /* 登录页：验证码（新用户注册）/ 密码 / 游客 三入口（C4 已拍板） */
 
@@ -14,6 +14,10 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState('')
   const [countdown, setCountdown] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  /* 卸载时清理验证码倒计时，避免泄漏的 setState */
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
   const tip = (s: string) => { setToast(s); setTimeout(() => setToast(''), 3200) }
 
@@ -22,9 +26,10 @@ export default function Login() {
     setBusy(true)
     try {
       const r = await sms(phone)
-      tip(r.message + '（' + r.dev_code + '）')
+      tip(r.message)
       setCountdown(60)
-      const t = setInterval(() => setCountdown((c) => { if (c <= 1) clearInterval(t); return c - 1 }), 1000)
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = setInterval(() => setCountdown((c) => { if (c <= 1) { if (timerRef.current) clearInterval(timerRef.current); return 0 } return c - 1 }), 1000)
     } catch (e) {
       tip((e as Error).message)
     } finally {
@@ -56,7 +61,7 @@ export default function Login() {
     try {
       const r = await login(phone, pass)
       setToken(r.token)
-      tip('登录成功 ✨')
+      tip(r.merged ? '登录成功，本机游客记录已并入 ✨' : '登录成功 ✨')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {
       tip((e as Error).message)
@@ -68,7 +73,7 @@ export default function Login() {
   const doGuest = async () => {
     setBusy(true)
     try {
-      await guest()
+      await ensureGuest()
       tip('已以游客身份进入')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {
@@ -130,7 +135,7 @@ export default function Login() {
             </label>
             <label className="login-field">
               <span>密码</span>
-              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="注册时设置的密码" onKeyDown={(e) => { if (e.key === 'Enter') void doLogin() }} />
+              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="注册时设置的密码" onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) void doLogin() }} />
             </label>
             <button className="login-btn" onClick={() => void doLogin()} disabled={busy}>{busy ? '处理中…' : '登录 ✦'}</button>
             <p className="login-note t-mono">首次使用请切到「验证码」入口注册</p>

@@ -17,17 +17,17 @@ export default function Radar({ dna, size = 230 }: { dna: Record<string, number>
   const vals = DNA_DIMS.map((d, i) => pt(i, R * Math.max(0, Math.min(10, dna[d] || 0)) / 10).join(',')).join(' ')
   const labels = DNA_DIMS.map((d, i) => {
     const [x, y] = pt(i, R + 20)
-    return <text key={d} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="12" fill="#8a93ab">{d}</text>
+    return <text key={d} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="12" fill="var(--color-dust-500)">{d}</text>
   })
   const vtxt = DNA_DIMS.map((d, i) => {
     const [x, y] = pt(i, R * 0.62)
     const v = dna[d] || 0
-    return <text key={d} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="11.5" fontFamily="monospace" fontWeight="700" fill={v >= 8 ? '#f0d9a0' : '#8a93ab'}>{v}</text>
+    return <text key={d} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="11.5" fontFamily="IBM Plex Mono, ui-monospace, monospace" fontWeight="700" fill={v >= 8 ? 'var(--color-gold-300)' : 'var(--color-dust-500)'}>{v}</text>
   })
   return (
     <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label="口碑五维雷达">
       {rings}{axes}
-      <polygon points={vals} fill="rgba(214,168,96,0.18)" stroke="#d4a860" strokeWidth="1.8" strokeLinejoin="round" />
+      <polygon points={vals} fill="rgba(212,168,96,0.18)" stroke="var(--color-gold-500)" strokeWidth="1.8" strokeLinejoin="round" />
       {labels}{vtxt}
     </svg>
   )

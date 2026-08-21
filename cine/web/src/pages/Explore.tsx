@@ -144,12 +144,13 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
   const [rail, setRail] = useState<Movie[]>([])
   const [recPage, setRecPage] = useState(1)
   const [kw, setKw] = useState('')
+  const [loadErr, setLoadErr] = useState(false)
 
   useEffect(() => {
-    movies({ sort: 'rating', limit: 12 }).then((d) => setRail(d.items)).catch(() => { /* 静默 */ })
+    movies({ sort: 'rating', limit: 12 }).then((d) => { setRail(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
   }, [])
   useEffect(() => {
-    movies({ sort: 'dna', limit: 10, page: recPage }).then((d) => setRecs(d.items)).catch(() => { /* 静默 */ })
+    movies({ sort: 'dna', limit: 10, page: recPage }).then((d) => { setRecs(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
   }, [recPage])
 
   const search = () => {
@@ -166,7 +167,7 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
           <input
             value={kw}
             onChange={(e) => setKw(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') search() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) search() }}
             placeholder="搜索电影 / 导演 / 演员 / 类型，如「诺兰」「张国荣」「悬疑」"
           />
           <button onClick={search}>搜索</button>
@@ -209,9 +210,13 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
           <h2>✦ 影灵今日推荐</h2>
           <button className="exp-more" onClick={() => setRecPage((p) => (p % 59) + 1)}>换一批 →</button>
         </div>
-        <div className="exp-rail">
-          {recs.map((m) => <Card key={m.movie_id} m={m} dim />)}
-        </div>
+        {loadErr && !recs.length
+          ? <p className="exp-load-err">⚠ 推荐加载失败，请确认服务已启动后刷新</p>
+          : (
+            <div className="exp-rail">
+              {recs.map((m) => <Card key={m.movie_id} m={m} dim />)}
+            </div>
+          )}
       </section>
 
       {/* 此刻心情 */}

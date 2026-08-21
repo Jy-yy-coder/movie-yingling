@@ -6,6 +6,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#05060a" />
+    <!-- 字体：国内镜像优先（loli.net → gstatic.loli.net），失败再走 jsDelivr 中国镜像 fontsource -->
+    <link rel="preconnect" href="https://fonts.loli.net" />
+    <link rel="preconnect" href="https://gstatic.loli.net" crossorigin />
+    <link rel="preconnect" href="https://cdn.jsdmirror.com" crossorigin />
+    <link id="cine-fonts" rel="stylesheet"
+      href="https://fonts.loli.net/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@600;700&display=swap" />
+    <script>
+      (function () {
+        var link = document.getElementById('cine-fonts')
+        if (!link) return
+        var used = false
+        function useJsdMirror() {
+          if (used) return
+          used = true
+          ;[
+            '@fontsource/noto-sans-sc@5.3.0/chinese-simplified-400.css',
+            '@fontsource/noto-sans-sc@5.3.0/chinese-simplified-500.css',
+            '@fontsource/noto-serif-sc@5.2.8/chinese-simplified-600.css',
+            '@fontsource/noto-serif-sc@5.2.8/chinese-simplified-700.css',
+            '@fontsource/ibm-plex-mono@5.3.0/latin-400.css',
+            '@fontsource/ibm-plex-mono@5.3.0/latin-500.css'
+          ].forEach(function (p) {
+            var l = document.createElement('link')
+            l.rel = 'stylesheet'
+            l.href = 'https://cdn.jsdmirror.com/npm/' + p
+            document.head.appendChild(l)
+          })
+        }
+        link.addEventListener('error', useJsdMirror)
+      })()
+    </script>
     <title>影灵 CINE · 电影宇宙</title>
     <!-- 51.LA V6 网站统计 -->
     <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>

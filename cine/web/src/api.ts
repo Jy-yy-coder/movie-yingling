@@ -36,6 +36,7 @@ export const chat = (
   post<ChatReply>('/api/chat', {
     message,
     device_id: deviceId(),
+    token: token(),
     mode,
     spoiler,
     conversation_id: conversationId,
@@ -91,7 +92,9 @@ export const feedback = async (movieId: string, kind: 'fav' | 'unfav' | 'view' |
 const P_KEY = 'cine_personality'
 export const personalityQuestions = () => get<{ questions: QuizQuestion[] }>('/api/personality/questions')
 export const submitPersonality = async (answers: { q: number; o: number }[]) => {
-  const r = await post<PersonalityProfile>('/api/personality/test', { answers, device_id: deviceId() })
+  const r = await post<PersonalityProfile>('/api/personality/test', {
+    answers, device_id: deviceId(), token: token(),
+  })
   try { localStorage.setItem(P_KEY, JSON.stringify(r)) } catch { /* ignore */ }
   return r
 }
@@ -112,12 +115,14 @@ export const watchOpening = (movieId: string, spoiler = true) =>
   get<WatchOpening>(`/api/watch/opening?movie_id=${encodeURIComponent(movieId)}&spoiler=${spoiler}`)
 
 /* ---------- 账号 ---------- */
-export const guest = () => post<{ token: string; device_id: string; is_guest: boolean }>('/api/auth/guest', { device_id: deviceId() })
+export const guest = () =>
+  post<{ token: string; device_id: string; is_guest: boolean }>('/api/auth/guest', { device_id: deviceId() })
+    .then((r) => { setToken(r.token); return r })   // 游客入口立即落 token，账号/收藏即刻可用
 export const login = (phone: string, password = '', code = '') =>
-  post<{ token: string; user_id: number }>('/api/auth/login', { phone, password, code })
+  post<{ token: string; user_id: number; merged: boolean }>('/api/auth/login', { phone, password, code, device_id: deviceId() })
 export const register = (phone: string, code: string, password: string) =>
   post<{ token: string; user_id: number; merged: boolean }>('/api/auth/register', { phone, code, password, device_id: deviceId() })
-export const sms = (phone: string) => post<{ message: string; dev_code: string }>('/api/auth/sms', { phone })
+export const sms = (phone: string) => post<{ message: string }>('/api/auth/sms', { phone })
 export const logout = () => setToken('')
 export const isLoggedIn = () => Boolean(token())
 

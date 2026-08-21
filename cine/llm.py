@@ -20,6 +20,7 @@ _last_call = [0.0]
 CONFIG = Path(__file__).resolve().parent.parent / "data" / "task" / "llm_config.json"
 CHAT_MODELS = ["deepseek-v4-flash", "glm-5.2"]
 MIN_INTERVAL = 1.0
+DEFAULT_BASE_URL = "https://token.sensenova.cn/v1"   # 与 llm_config.json 约定一致（见 PLATFORM_DOCUMENTATION）
 
 
 _QUOTA_RE = re.compile(r"insufficient_quota|insufficient|quota|balance|credit|欠费|余额|配额|充值|billing", re.I)
@@ -50,19 +51,30 @@ def _read_backup_keys() -> list[str]:
 
 
 def _cfg():
+    """组装配置与 key 链。配置文件缺失/损坏不再整体失败：
+    base_url 走默认值，key 仍按 环境变量 -> 本地主 key -> 备用列表 -> 配置内联 组装。"""
     try:
         cfg = json.loads(CONFIG.read_text(encoding="utf-8"))
-        # key 链：环境变量 -> 本地主 key -> 本地备用 key 列表 -> 配置内联（仅演示）
-        keys: list[str] = []
-        for k in ([os.environ.get("CINE_LLM_API_KEY")] + [_read_local_key()]
-                  + _read_backup_keys() + [cfg.get("api_key")]):
-            if k and k not in keys:
-                keys.append(k)
-        cfg["_keys"] = keys
-        cfg["api_key"] = keys[0] if keys else None
-        return cfg
+        if not isinstance(cfg, dict):
+            cfg = {}
     except Exception:
-        return None
+        log.warning("llm_config.json 缺失或不可读，使用默认 base_url；key 走环境变量/本地 key 文件")
+        cfg = {}
+    keys: list[str] = []
+    for k in ([os.environ.get("CINE_LLM_API_KEY")] + [_read_local_key()]
+              + _read_backup_keys() + [cfg.get("api_key")]):
+        if k and k not in keys:
+            keys.append(k)
+    cfg["_keys"] = keys
+    cfg["api_key"] = keys[0] if keys else None
+    if not cfg.get("base_url"):
+        cfg["base_url"] = DEFAULT_BASE_URL
+    return cfg
+
+
+def has_key() -> bool:
+    """是否存在任何可用 LLM key（启动体检用）。"""
+    return bool((_cfg() or {}).get("_keys"))
 
 
 def _models(cfg):
@@ -75,17 +87,21 @@ def _models(cfg):
 
 
 def _throttle():
+    """全局最小间隔节流：锁内只预约时间片，sleep 在锁外进行，
+    避免并发请求被持锁 sleep 硬串行化。"""
     with _lock:
-        wait = MIN_INTERVAL - (time.time() - _last_call[0])
-        if wait > 0:
-            time.sleep(wait)
-        _last_call[0] = time.time()
+        now = time.time()
+        wait = MIN_INTERVAL - (now - _last_call[0])
+        _last_call[0] = now + max(wait, 0.0)
+    if wait > 0:
+        time.sleep(wait)
 
 
-def chat_reply(system: str, user: str, max_tokens=700, timeout=90, history=None, temperature=0):
+def chat_reply(system: str, user: str, max_tokens=700, timeout=20, history=None, temperature=0):
     """返回 (回复文本, 所用模型)；全部失败返回 (None, None)。
     history: [{"role":"user","content":"..."},{"role":"assistant","content":"..."}] 列表（最近 10 条，由调用方截好）。
     temperature: 推荐场景用 0.7，问答/搜索用 0（默认 0，防幻觉）。
+    timeout 默认 20s（演示场景快速失败降级，避免单请求挂起拖垮交互）。
     额度不足/鉴权失败自动轮换备用 key（llm_keys_backup.txt）。"""
     cfg = _cfg()
     keys = (cfg or {}).get("_keys") or []
@@ -96,10 +112,13 @@ def chat_reply(system: str, user: str, max_tokens=700, timeout=90, history=None,
     except ImportError:
         return None, None
 
-    # 组装 messages：system + history + 当前 user
+    # 组装 messages：system + history + 当前 user。
+    # history 只取 role/content——会话记录里的 movie_ids 等内部字段不得进入 LLM 请求。
     messages = [{"role": "system", "content": system}]
     if history:
-        messages += history[-10:]   # 防御性再截一次，正常情况下 main.py 已截好
+        messages += [{"role": h.get("role"), "content": h.get("content")}
+                     for h in history[-10:]
+                     if h.get("role") in ("user", "assistant") and h.get("content")]
     messages.append({"role": "user", "content": user})
 
     for ki, key in enumerate(keys):

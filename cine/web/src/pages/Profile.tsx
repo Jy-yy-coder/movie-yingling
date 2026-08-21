@@ -53,7 +53,7 @@ export default function Profile() {
             )}
 
             <div className="profile-section">
-              <div className="profile-section-title">我的收藏 · {data.discovered}</div>
+              <div className="profile-section-title">我的收藏 · {data.favorites.length}</div>
               {data.favorites.length ? (
                 <div className="profile-favs">
                   {data.favorites.map((m) => (
