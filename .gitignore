@@ -1,0 +1,76 @@
+# ============================
+# 影灵 CINE 项目 .gitignore
+# ============================
+
+# ---------- 敏感信息（API Key / Token / 密码） ----------
+.env
+.env.*
+data/task/llm_config.json
+data/task/llm_key.local.txt
+data/task/llm_keys_backup.txt
+cookies/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+*.egg
+
+# ---------- Node.js ----------
+node_modules/
+dist/
+dist-ssr/
+build/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---------- 大数据文件（CSV / DB / 海报 / 向量） ----------
+# 原始数据（过大，不适合 GitHub）
+data/*.csv
+data/*.xlsx
+data/posters/
+data/enriched/posters_thumb/
+# 运行时 / 构建产物数据库
+data/enriched/*.db
+data/enriched/*.npz
+# 备份文件
+*.bak*
+*.bak_p1
+cine/data.py.bak_p1
+cine/main.py.bak_p1
+data/enriched/*.bak_*
+data/enriched/*_v0.json
+data/enriched/llm_partial*.json
+data/enriched/core_dna*.json
+data/enriched/core_quotes*.json
+data/enriched/build_task_llm.csv
+data/enriched/_clean_stats.txt
+data/enriched/sample_cards*.md
+
+# ---------- 运行时数据库 ----------
+cine/data/*.db
+cine/data/*.log
+
+# ---------- 临时文件 ----------
+_tmp_*
+_shots/
+
+# ---------- 日志 ----------
+logs/
+
+# ---------- 编辑器 / IDE ----------
+.vscode/
+.idea/
+.claude/
+*.suo
+*.sw?
+
+# ---------- 系统文件 ----------
+.DS_Store
+Thumbs.db
+desktop.ini

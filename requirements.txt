@@ -1,0 +1,16 @@
+# 影灵 CINE · Python 依赖
+# 安装：pip install -r requirements.txt
+
+# Web 框架
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+
+# LLM 聊天（可选，无 key 时自动降级离线模式）
+openai>=1.0.0
+
+# 向量语义检索（可选，首次构建向量时需要）
+# sentence-transformers>=2.2.0
