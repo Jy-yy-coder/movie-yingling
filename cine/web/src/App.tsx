@@ -59,6 +59,16 @@ export default function App() {
     sessionStorage.setItem('cine_route_now', route.path)
   }, [route])
 
+  /* 51.LA SPA 路由统计：hash 切换时手动上报页面浏览 */
+  useEffect(() => {
+    const track = () => {
+      const w = window as unknown as { LA?: { pageview: () => void } }
+      if (w.LA?.pageview) w.LA.pageview()
+    }
+    window.addEventListener('hashchange', track)
+    return () => window.removeEventListener('hashchange', track)
+  }, [])
+
   /* 镜头同步：进入电影空间时飞向该星 */
   useEffect(() => {
     if (route.path === '/movie' && route.params.id) {
