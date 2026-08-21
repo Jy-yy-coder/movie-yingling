@@ -211,7 +211,7 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
           <button className="exp-more" onClick={() => setRecPage((p) => (p % 59) + 1)}>换一批 →</button>
         </div>
         {loadErr && !recs.length
-          ? <p style={{ color: '#8a93ad', fontSize: 13, padding: '18px 2px' }}>⚠ 推荐加载失败，请确认服务已启动后刷新</p>
+          ? <p className="exp-load-err">⚠ 推荐加载失败，请确认服务已启动后刷新</p>
           : (
             <div className="exp-rail">
               {recs.map((m) => <Card key={m.movie_id} m={m} dim />)}

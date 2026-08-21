@@ -91,12 +91,9 @@ export default function App() {
       <GalaxyScene />
       <HUD />
       {galaxyErr && (
-        <div
-          className="glass"
-          style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', gap: 12, alignItems: 'center', padding: '10px 18px', borderRadius: 14, fontSize: 13 }}
-        >
+        <div className="glass toast-banner" role="alert">
           <span>{galaxyRetrying ? '正在重新加载银河…' : '⚠ 银河数据加载失败，请确认后端已启动（端口 8010）'}</span>
-          <button className="t-mono" type="button" style={{ cursor: galaxyRetrying ? 'wait' : 'pointer' }} onClick={retryGalaxy} disabled={galaxyRetrying}>
+          <button className="t-mono" type="button" onClick={retryGalaxy} disabled={galaxyRetrying}>
             {galaxyRetrying ? '重试中' : '重试'}
           </button>
         </div>

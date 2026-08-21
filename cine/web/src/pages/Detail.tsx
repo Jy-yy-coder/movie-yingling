@@ -137,10 +137,10 @@ export default function Detail({ id }: { id: string }) {
               <div className="emo-grid">
                 <div className="emo-temp glass">
                   <span className="emo-temp-label">情绪温度</span>
-                  <div className="emo-temp-ring">
+                  <div className="emo-temp-ring" style={{ ['--temp' as string]: String(s.temp ?? 50) }}>
                     <div className="emo-temp-ring-inner"><b>{s.temp}</b><span>/100</span></div>
                   </div>
-                  <span className="t-mono" style={{ fontSize: 11, color: '#8a93ad' }}>
+                  <span className="t-mono emo-temp-cap">
                     {(s.temp ?? 50) >= 55 ? '偏暖 · 观众整体满意' : (s.temp ?? 50) <= 45 ? '偏冷 · 口碑有分歧' : '温和 · 褒贬均衡'}
                   </span>
                 </div>
