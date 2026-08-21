@@ -165,7 +165,7 @@ export default function Navigator() {
                     placeholder="比如：最近压力很大，想看温暖一点的..."
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void go() }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) void go() }}
                   />
                   <button className={`navi-go ${busy ? 'busy' : ''}`} onClick={() => void go()} disabled={busy}>
                     {busy ? '点亮中…' : '出发 ✦'}

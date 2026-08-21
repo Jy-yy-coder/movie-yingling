@@ -231,7 +231,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void send() }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) void send() }}
               placeholder={mode === 'talk' ? '比如：我看完《霸王别姬》了，想聊聊…' : '比如：推荐一部燃的科幻片…'}
             />
             <button className="chat-send" onClick={() => void send()} disabled={busy}>发送 ✦</button>

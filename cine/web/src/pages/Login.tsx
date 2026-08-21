@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { guest, login, register, sms, setToken } from '../api'
+import { ensureGuest, login, register, sms, setToken } from '../api'
 
 /* 登录页：验证码（新用户注册）/ 密码 / 游客 三入口（C4 已拍板） */
 
@@ -73,7 +73,7 @@ export default function Login() {
   const doGuest = async () => {
     setBusy(true)
     try {
-      await guest()
+      await ensureGuest()
       tip('已以游客身份进入')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {
@@ -135,7 +135,7 @@ export default function Login() {
             </label>
             <label className="login-field">
               <span>密码</span>
-              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="注册时设置的密码" onKeyDown={(e) => { if (e.key === 'Enter') void doLogin() }} />
+              <input type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="注册时设置的密码" onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) void doLogin() }} />
             </label>
             <button className="login-btn" onClick={() => void doLogin()} disabled={busy}>{busy ? '处理中…' : '登录 ✦'}</button>
             <p className="login-note t-mono">首次使用请切到「验证码」入口注册</p>

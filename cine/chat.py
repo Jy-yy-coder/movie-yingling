@@ -59,6 +59,11 @@ SYSTEM_PROMPT_REC = """你是「影灵」，一位懂电影、懂人心的私人
 - 回复末尾附上你推荐的电影编号，格式：[推荐编号: 1,3]
 """
 
+SYSTEM_PROMPT_REC_SAFE = SYSTEM_PROMPT_REC.replace(
+    "每段先写《片名》+推荐理由，再用「简介：」给出忠于清单的完整简介，不得截断或用省略号缩写。",
+    "每段先写《片名》+推荐理由（口碑、DNA、适合谁看），严禁写出剧情走向、结局或「简介：」段落。",
+)
+
 SYSTEM_PROMPT_MOVIE = """你是影灵CINE电影助手，正在回答用户关于某部电影的问题。
 用户消息后会附上【该片事实】卡片，包含基本信息、剧情简介、观众口碑维度、高赞评论——这是你唯一的事实来源。
 必须遵守：
@@ -188,9 +193,7 @@ def _movie_card(m, safe: bool = False):
     lines.append(f"DNA: {dims}")
     if m.get("runtime_min"):
         lines.append(f"片长: {m['runtime_min']}分钟")
-    if safe:
-        lines.append("简介: （无剧透模式已开启，剧情简介不对此模式开放）")
-    elif m.get("summary") or m.get("brief"):
+    if not safe and (m.get("summary") or m.get("brief")):
         lines.append("简介: " + (m.get("summary") or m.get("brief") or "").strip())
     up = (m.get("quotes") or {}).get("up1")
     if up:
@@ -236,8 +239,10 @@ def _citations_for(m, n=2, spoiler=True):
     return out[:n]
 
 
-# 推荐意图关键词：命中时电影名解析关闭「弱反向包含」，避免口语推荐句被短标题劫持
-_REC_INTENT_HINT = re.compile(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|换两部|换几部")
+# 换片/再推荐：有电影上下文时让位给推荐链路（不含「想看」，避免「想看《X》」被当成换片）
+_REC_CHIP_HINT = re.compile(r"推荐|来部|来点|换两部|换几部")
+# 「类似《X》」走相似推荐，而不是被书名号解析成单片问答
+_SIMILAR_HINT = re.compile(r"类似|同款|像这部|同类")
 
 
 def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: list | None = None,
@@ -257,14 +262,18 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
     history = history or []
 
     # —— 优先处理：有电影上下文时的追问（推荐/换片类 chip 让位给推荐链路）——
-    if movie_context and _is_followup(msg) and not _REC_INTENT_HINT.search(msg):
+    if movie_context and _is_followup(msg) and not _REC_CHIP_HINT.search(msg):
         m = movie_context["data"]
         kind = "core" if "movie_id" in m and not m.get("ext") else "ext"
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
 
-    # —— 意图 1：电影名解析（库内优先，库外兜底；推荐句关闭弱匹配防劫持）——
-    kind, m = search.resolve_title(msg, allow_weak=not _REC_INTENT_HINT.search(msg))
+    # —— 意图 1：电影名解析。弱匹配靠 ≥3 字阈值挡住《活着》《过年》；
+    # 「类似《X》」即使解析到片名也走推荐，避免书名号劫持相似问句。——
+    kind, m = search.resolve_title(msg, allow_weak=True)
     if m is not None:
+        if _SIMILAR_HINT.search(msg):
+            hint = recommend.parse_hint(msg)
+            return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
 
     # —— 意图 2：评论/梗检索 ——
@@ -370,7 +379,7 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
     line = f"《{m['title']}》({m.get('year') or '年份未知'}) 豆瓣 {m.get('rating') or '暂无'}"
     if m.get("genres"):
         line += f" | 类型: {m['genres']}"
-    if m.get("summary"):
+    if m.get("summary") and not spoiler:
         line += f"\n简介: {m['summary'][:100]}"
     if not m.get("rating") and not m.get("summary"):
         line += "\n(这部片信息较简，仅收录了片名/年份)"
@@ -504,27 +513,33 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
     lines = []
     cards = []
     for i, m in enumerate(ms, 1):
-        lines.append(f"{i}. {_movie_card(m)}")
+        lines.append(f"{i}. {_movie_card(m, safe=spoiler)}")
         cards.append(_rec_card(m, hint, i))
         cits += _citations_for(m, 1, spoiler)
     facts = "\n".join(lines)
-    plain = "\n\n".join(
-        f"《{m['title']}》({m['year']}，豆瓣 {m['rating']})\n简介：{(m.get('summary') or m.get('brief') or '').strip()}"
-        for m in ms)
+    if spoiler:
+        plain = "\n\n".join(
+            f"《{m['title']}》({m['year']}，豆瓣 {m['rating']})"
+            for m in ms)
+    else:
+        plain = "\n\n".join(
+            f"《{m['title']}》({m['year']}，豆瓣 {m['rating']})\n简介：{(m.get('summary') or m.get('brief') or '').strip()}"
+            for m in ms)
     # B4：把用户行为偏好注入 prompt，让 AI 在推荐时自然引用（演示"越用越懂我"）
     rec_prompt = f"用户问：{msg}\n\n推荐清单:\n{facts}"
     if like_genres:
         taste = "、".join(like_genres.keys())
         rec_prompt = (f"用户问：{msg}\n\n"
                       f"【你的观影偏好（来自你最近收藏/点开的电影）】{taste}\n\n推荐清单:\n{facts}")
+    rec_system = SYSTEM_PROMPT_REC_SAFE if spoiler else SYSTEM_PROMPT_REC
     offline, polished, model = _polish(
-        SYSTEM_PROMPT_REC, rec_prompt, cits, offline_txt=plain,
+        rec_system, rec_prompt, cits, offline_txt=plain,
         history=history, temperature=0.7, max_tokens=2800)
 
     # —— 防幻觉校验 ——
     n_candidates = len(ms)
     if not offline and not _validate_rec_ids(polished, n_candidates):
-        retry_system = SYSTEM_PROMPT_REC + f"\n\n硬性要求：只推荐清单中的电影，推荐编号必须在1到{n_candidates}之间。"
+        retry_system = rec_system + f"\n\n硬性要求：只推荐清单中的电影，推荐编号必须在1到{n_candidates}之间。"
         offline, polished, model = _polish(
             retry_system, rec_prompt, cits, offline_txt=plain,
             history=history, temperature=0.7, max_tokens=2800)
@@ -542,9 +557,9 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
     polished = polished.replace('**', '')
     polished = re.sub(r'(?m)^-{3,}\s*$', '', polished)
 
-    # 简介强制完整：LLM 输出可能被长度截断或改写简介，
-    # 每部影片的段落统一在「简介：」处截断并接上数据库完整简介
-    polished = _enforce_summary(polished, ms)
+    # 有剧透时才把数据库完整简介贴进正文；无剧透模式禁止这步（否则必剧透）
+    if not spoiler:
+        polished = _enforce_summary(polished, ms)
 
     # 卡片与正文对齐：只保留正文里以《片名》形式出现的电影
     # （决策段可能提到被排除的候选，但那是不带《》的模糊说法，不能把其卡片带出来）

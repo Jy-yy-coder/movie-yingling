@@ -36,6 +36,7 @@ export const chat = (
   post<ChatReply>('/api/chat', {
     message,
     device_id: deviceId(),
+    token: token(),
     mode,
     spoiler,
     conversation_id: conversationId,
@@ -91,7 +92,9 @@ export const feedback = async (movieId: string, kind: 'fav' | 'unfav' | 'view' |
 const P_KEY = 'cine_personality'
 export const personalityQuestions = () => get<{ questions: QuizQuestion[] }>('/api/personality/questions')
 export const submitPersonality = async (answers: { q: number; o: number }[]) => {
-  const r = await post<PersonalityProfile>('/api/personality/test', { answers, device_id: deviceId() })
+  const r = await post<PersonalityProfile>('/api/personality/test', {
+    answers, device_id: deviceId(), token: token(),
+  })
   try { localStorage.setItem(P_KEY, JSON.stringify(r)) } catch { /* ignore */ }
   return r
 }

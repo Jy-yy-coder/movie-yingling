@@ -111,14 +111,17 @@ def _init_db():
             kind TEXT NOT NULL,
             created_at TEXT);
     """)
-    # 游客行 device_id 唯一化（部分索引，不影响「游客+注册并存」的合并语义）。
-    # 旧库若已有重复游客行则建索引失败，注册合并会逐步清理，此处静默跳过。
+    _try_guest_device_index(con)
+    con.close()
+
+
+def _try_guest_device_index(con: sqlite3.Connection):
+    """游客 device_id 部分唯一索引。旧库有重复行时建索引失败，合并清掉后再试。"""
     try:
         con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_guest_device "
                     "ON users(device_id) WHERE phone IS NULL AND device_id IS NOT NULL")
     except sqlite3.IntegrityError:
         pass
-    con.close()
 
 def _token(uid, phone):
     raw = hashlib.md5(f"{uid}|{phone}|{time.time()}".encode()).hexdigest()[:24]
@@ -232,6 +235,7 @@ def api_lookup(title: str = ""):
 class ChatIn(BaseModel):
     message: str
     device_id: str = "guest"
+    token: str = ""          # 有则按登录态写聊天，避免登录合并后 device_id 再开新游客
     mode: str = "rec"        # rec 推荐选片 / talk 陪看讨论
     spoiler: bool = True     # 无剧透开关
     conversation_id: int | None = None   # 会话 ID（可选，不传则自动创建）
@@ -265,18 +269,18 @@ def _load_conversation_history(conversation_id: int, uid: int, limit: int = 24) 
     仅返回本人会话的历史，非本人会话一律视为无历史。"""
     if not conversation_id or not _conversation_owned(conversation_id, uid):
         return []
+    con = _conn()
     try:
-        con = _conn()
         rows = con.execute(
             "SELECT role, content, movie_ids FROM conversation_messages "
             "WHERE conversation_id=? ORDER BY id DESC LIMIT ?",
             (conversation_id, limit)).fetchall()
-        con.close()
         return [{"role": r[0], "content": r[1], "movie_ids": r[2]} for r in reversed(rows)]
     except Exception as e:
-        import logging
-        logging.getLogger("cine.chat").warning(f"加载会话历史失败: {e}")
+        logging.getLogger("cine.chat").warning("加载会话历史失败: %s", e)
         return []
+    finally:
+        con.close()
 
 
 def _load_movie_context(movie_id: str | None, spoiler: bool = True) -> dict | None:
@@ -330,7 +334,7 @@ def _save_conversation_message(conversation_id: int, role: str, content: str,
 
 @app.post("/api/chat")
 def api_chat(body: ChatIn):
-    uid = _resolve_user_id(body.device_id)
+    uid = _uid_from_auth(body.token, body.device_id)
 
     # 会话管理：有 conversation_id 则用（校验归属，防越权读写他人会话），否则创建新会话
     conv_id = body.conversation_id
@@ -345,8 +349,12 @@ def api_chat(body: ChatIn):
     history = _load_conversation_history(conv_id, uid)
     movie_id = body.movie_id
     if not movie_id and conv_id:
-        row = _conn().execute("SELECT movie_id FROM conversations WHERE id=?", (conv_id,)).fetchone()
-        movie_id = row[0] if row else None
+        con = _conn()
+        try:
+            row = con.execute("SELECT movie_id FROM conversations WHERE id=?", (conv_id,)).fetchone()
+            movie_id = row[0] if row else None
+        finally:
+            con.close()
     movie_ctx = _load_movie_context(movie_id, spoiler=body.spoiler)
 
     # 加载人格画像（有则用于推荐候选重排，无则行为不变）
@@ -431,6 +439,47 @@ def _resolve_user_id(device_id):
     con.commit(); con.close()
     return uid
 
+
+def _uid_from_auth(token: str = "", device_id: str = "") -> int:
+    """聊天/人格写入：有合法 token 用登录账号，否则回落 device_id。"""
+    if token:
+        con = _conn()
+        try:
+            row = con.execute("SELECT id FROM users WHERE token=?", (token,)).fetchone()
+            if row:
+                return row[0]
+        finally:
+            con.close()
+    return _resolve_user_id(device_id or "guest")
+
+
+def _resolve_guest_user_id(device_id: str) -> int:
+    """只解析/创建游客行，不碰已注册账号（避免点「游客」覆盖正式 token）。"""
+    con = _conn()
+    try:
+        row = con.execute(
+            "SELECT id FROM users WHERE device_id=? AND phone IS NULL ORDER BY id",
+            (device_id,)).fetchone()
+        if row:
+            uid = row[0]
+        else:
+            try:
+                cur = con.execute(
+                    "INSERT INTO users(device_id,token,created_at) VALUES(?,?,?)",
+                    (device_id, _token(0, device_id), time.strftime("%F %T")))
+                uid = cur.lastrowid
+            except sqlite3.IntegrityError:
+                row = con.execute(
+                    "SELECT id FROM users WHERE device_id=? AND phone IS NULL ORDER BY id",
+                    (device_id,)).fetchone()
+                if not row:
+                    raise
+                uid = row[0]
+        con.commit()
+        return uid
+    finally:
+        con.close()
+
 # ---------------- 探索档案（等级/徽章） ----------------
 LEVELS = [("Lv.5", "银河领主", 60), ("Lv.4", "宇宙收藏家", 30), ("Lv.3", "星系开拓者", 15),
           ("Lv.2", "星河漫游者", 5), ("Lv.1", "电影旅人", 0)]
@@ -487,6 +536,7 @@ def api_explorer(token: str = ""):
 class PersonalityIn(BaseModel):
     answers: list[dict]            # [{q: 题号, o: 选项号}, ...]
     device_id: str = "guest"
+    token: str = ""                # 有则写入登录账号，与聊天同一身份链
 
 
 def _personality_result(dna: dict, keywords: list[str], created_at: str | None = None) -> dict:
@@ -516,8 +566,8 @@ def api_personality_test(body: PersonalityIn):
     dna = personality.compute_dna(body.answers)
     keywords = personality.collect_keywords(body.answers)
     quiz_dims = personality.accumulate(body.answers)
-    # 保存：每用户仅保留最新一份（游客经 device_id 关联）
-    uid = _resolve_user_id(body.device_id)
+    # 保存：每用户仅保留最新一份（token 优先，与聊天同一身份链）
+    uid = _uid_from_auth(body.token, body.device_id)
     con = _conn()
     now = time.strftime("%F %T")
     con.execute("DELETE FROM user_personality WHERE user_id=?", (uid,))
@@ -605,7 +655,7 @@ class GuestIn(BaseModel):
 
 @app.post("/api/auth/guest")
 def api_guest(body: GuestIn):
-    uid = _resolve_user_id(body.device_id)
+    uid = _resolve_guest_user_id(body.device_id)
     con = _conn()
     tok = _token(uid, f"d{body.device_id}")
     con.execute("UPDATE users SET token=? WHERE id=?", (tok, uid))
@@ -634,9 +684,15 @@ class RegisterIn(BaseModel):
     password: str
     device_id: str = ""
 
-def _merge_guest_data(con: sqlite3.Connection, uid: int, device_id: str):
+def _merge_guest_data(con: sqlite3.Connection, uid: int, device_id: str) -> bool:
     """把 device_id 名下游客行（phone IS NULL）的聊天/收藏/人格/信号/会话并入 uid，
-    并删除游客行，避免同 device_id 双行导致路由错乱。注册与登录共用。"""
+    并删除游客行，避免同 device_id 双行导致路由错乱。注册与登录共用。
+    返回是否实际迁到了游客行。"""
+    guest_row = con.execute(
+        "SELECT id FROM users WHERE device_id=? AND id!=? AND phone IS NULL LIMIT 1",
+        (device_id, uid)).fetchone()
+    if not guest_row:
+        return False
     guest_sub = "(SELECT id FROM users WHERE device_id=? AND id!=? AND phone IS NULL)"
     gargs = (device_id, uid)
     con.execute(f"UPDATE chats SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
@@ -654,6 +710,8 @@ def _merge_guest_data(con: sqlite3.Connection, uid: int, device_id: str):
     # 数据已全部迁移，删除游客行，杜绝同 device_id 双行
     con.execute("DELETE FROM users WHERE device_id=? AND id!=? AND phone IS NULL",
                 (device_id, uid))
+    _try_guest_device_index(con)
+    return True
 
 
 @app.post("/api/auth/register")
@@ -676,13 +734,11 @@ def api_register(body: RegisterIn):
     uid = cur.lastrowid
     tok = _token(uid, body.phone)
     con.execute("UPDATE users SET token=? WHERE id=?", (tok, uid))
-    # 游客历史合并：聊天 + 收藏 + 人格 + 行为信号 + 会话（详见 _merge_guest_data）
-    if body.device_id:
-        _merge_guest_data(con, uid, body.device_id)
+    merged = _merge_guest_data(con, uid, body.device_id) if body.device_id else False
     # 验证码用后即销毁，防 600 秒内重放
     con.execute("DELETE FROM sms_codes WHERE phone=?", (body.phone,))
     con.commit(); con.close()
-    return {"token": tok, "user_id": uid, "merged": bool(body.device_id)}
+    return {"token": tok, "user_id": uid, "merged": merged}
 
 class LoginIn(BaseModel):
     phone: str
@@ -708,12 +764,13 @@ def api_login(body: LoginIn):
             con.close(); raise HTTPException(400, "手机号或密码不对")
     row = con.execute("SELECT id FROM users WHERE phone=?", (body.phone,)).fetchone()
     tok = _token(row[0], body.phone)
-    con.execute("UPDATE users SET token=? WHERE id=?", (tok, row[0]))
-    # 最小合并补丁：登录也接管本机游客数据（此前只有注册会合并，跨设备登录即「人设蒸发」）
-    merged = False
+    # 绑定本机 device_id，使无 token 的回落路径也打到登录账号
     if body.device_id:
-        _merge_guest_data(con, row[0], body.device_id)
-        merged = True
+        con.execute("UPDATE users SET token=?, device_id=? WHERE id=?",
+                    (tok, body.device_id, row[0]))
+    else:
+        con.execute("UPDATE users SET token=? WHERE id=?", (tok, row[0]))
+    merged = _merge_guest_data(con, row[0], body.device_id) if body.device_id else False
     con.commit(); con.close()
     return {"token": tok, "user_id": row[0], "merged": merged}
 

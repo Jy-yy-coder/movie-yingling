@@ -117,7 +117,8 @@ def chat_reply(system: str, user: str, max_tokens=700, timeout=20, history=None,
     messages = [{"role": "system", "content": system}]
     if history:
         messages += [{"role": h.get("role"), "content": h.get("content")}
-                     for h in history[-10:]]
+                     for h in history[-10:]
+                     if h.get("role") in ("user", "assistant") and h.get("content")]
     messages.append({"role": "user", "content": user})
 
     for ki, key in enumerate(keys):

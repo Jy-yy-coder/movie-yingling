@@ -45,13 +45,14 @@ export default function App() {
   const setBooted = useGalaxy((s) => s.setBooted)
   const setSelected = useGalaxy((s) => s.setSelected)
   const [galaxyErr, setGalaxyErr] = useState(false)
+  const [galaxyRetrying, setGalaxyRetrying] = useState(false)
 
   /* 首帧：加载 5000 颗星球（590 核心 + 库外精选）+ 判断是否需要开场 */
   useEffect(() => {
     let alive = true
     void galaxy()
       .then((d) => { buildLayout(d.planets); if (alive) { setPlanets(d.planets); setGalaxyErr(false) } })
-      .catch(() => { if (alive) setGalaxyErr(true) })   // 后端未启/断网：明确提示而非静默空白
+      .catch(() => { if (alive) setGalaxyErr(true) })
     return () => { alive = false }
   }, [setPlanets])
   useEffect(() => {
@@ -59,8 +60,12 @@ export default function App() {
   }, [setBooted])
 
   const retryGalaxy = () => {
-    setGalaxyErr(false)
-    void galaxy().then((d) => { buildLayout(d.planets); setPlanets(d.planets) }).catch(() => setGalaxyErr(true))
+    if (galaxyRetrying) return
+    setGalaxyRetrying(true)
+    void galaxy()
+      .then((d) => { buildLayout(d.planets); setPlanets(d.planets); setGalaxyErr(false) })
+      .catch(() => setGalaxyErr(true))
+      .finally(() => setGalaxyRetrying(false))
   }
 
   /* 进入详情页前记住来源页（详情页退出时回到来源，而不是一律跳回银河） */
@@ -90,8 +95,10 @@ export default function App() {
           className="glass"
           style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', gap: 12, alignItems: 'center', padding: '10px 18px', borderRadius: 14, fontSize: 13 }}
         >
-          <span>⚠ 银河数据加载失败，请确认后端已启动（端口 8010）</span>
-          <button className="t-mono" style={{ cursor: 'pointer' }} onClick={retryGalaxy}>重试</button>
+          <span>{galaxyRetrying ? '正在重新加载银河…' : '⚠ 银河数据加载失败，请确认后端已启动（端口 8010）'}</span>
+          <button className="t-mono" type="button" style={{ cursor: galaxyRetrying ? 'wait' : 'pointer' }} onClick={retryGalaxy} disabled={galaxyRetrying}>
+            {galaxyRetrying ? '重试中' : '重试'}
+          </button>
         </div>
       )}
       <AnimatePresence>

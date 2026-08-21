@@ -52,7 +52,9 @@ function CameraRig() {
 
   /* 飞行状态用 ref 承载，避免 useFrame 闭包过期；复用临时向量减少 GC 压力 */
   const flyingRef = useRef(true)
-  const flightKey = `${focusRegion}|${focusGenre}|${selectedId}`
+  const interactTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const minDist = 8
+  const flightKey = `${focusRegion}|${focusGenre}|${selectedId}|${selectedPos ? 1 : 0}`
   useEffect(() => { flyingRef.current = true }, [flightKey])
   const dirTmp = useMemo(() => new THREE.Vector3(), [])
   const targetTmp = useMemo(() => new THREE.Vector3(), [])
@@ -64,13 +66,13 @@ function CameraRig() {
     const sp = selectedPos
     targetTmp.set(sp ? sp.x : desired.x, sp ? sp.y : desired.y, sp ? sp.z : desired.z)
     const cam = c.object
-    const wantDist = sp ? 6 : focusRegion ? 30 : 96
+    const wantDist = sp ? 12 : focusRegion ? 30 : 96
     dirTmp.copy(cam.position).sub(targetTmp).normalize()
-    desiredTmp.copy(targetTmp).add(dirTmp.multiplyScalar(Math.max(wantDist, 3)))
+    desiredTmp.copy(targetTmp).add(dirTmp.multiplyScalar(Math.max(wantDist, minDist)))
     cam.position.lerp(desiredTmp, 0.05)
     c.target.lerp(targetTmp, 0.07)
     c.update()
-    if (cam.position.distanceTo(desiredTmp) < 0.4) flyingRef.current = false   // 到位即放手
+    if (cam.position.distanceTo(desiredTmp) < 0.4) flyingRef.current = false
   })
   return (
     <OrbitControls
@@ -78,10 +80,17 @@ function CameraRig() {
       enablePan={false}
       enableDamping
       dampingFactor={0.08}
-      minDistance={8}
+      minDistance={minDist}
       maxDistance={300}
-      onStart={() => { setInteracting(true); flyingRef.current = false }}   // 用户接管，取消飞行
-      onEnd={() => setTimeout(() => setInteracting(false), 260)}
+      onStart={() => {
+        if (interactTimer.current) clearTimeout(interactTimer.current)
+        setInteracting(true)
+        flyingRef.current = false
+      }}
+      onEnd={() => {
+        if (interactTimer.current) clearTimeout(interactTimer.current)
+        interactTimer.current = setTimeout(() => setInteracting(false), 260)
+      }}
     />
   )
 }

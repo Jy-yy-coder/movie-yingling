@@ -147,10 +147,10 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
   const [loadErr, setLoadErr] = useState(false)
 
   useEffect(() => {
-    movies({ sort: 'rating', limit: 12 }).then((d) => setRail(d.items)).catch(() => setLoadErr(true))
+    movies({ sort: 'rating', limit: 12 }).then((d) => { setRail(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
   }, [])
   useEffect(() => {
-    movies({ sort: 'dna', limit: 10, page: recPage }).then((d) => setRecs(d.items)).catch(() => setLoadErr(true))
+    movies({ sort: 'dna', limit: 10, page: recPage }).then((d) => { setRecs(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
   }, [recPage])
 
   const search = () => {
@@ -167,7 +167,7 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
           <input
             value={kw}
             onChange={(e) => setKw(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) search() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) search() }}
             placeholder="搜索电影 / 导演 / 演员 / 类型，如「诺兰」「张国荣」「悬疑」"
           />
           <button onClick={search}>搜索</button>
