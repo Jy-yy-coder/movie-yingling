@@ -1123,11 +1123,11 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 
 /* ---- 个人中心：游客状态横幅 ---- */
 .account-guest-banner {
-  display: block; width: 100%; margin-top: 16px; padding: 13px 18px; border-radius: 13px;
+  display: block; margin-top: 16px; padding: 13px 18px; border-radius: 13px;
   text-align: left; font-size: 12.5px; letter-spacing: .5px; color: var(--color-gold-300);
   background: linear-gradient(160deg, rgba(240, 217, 160, 0.08), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(240, 217, 160, 0.2); transition: border-color .2s;
-}
+}   /* 宽度随 .account > *（min(860px,100%)），与资料卡/分区同宽 */
 .account-guest-banner:hover { border-color: rgba(240, 217, 160, 0.45); }
 
 /* ---- 游客模式：独立询问页 ---- */
