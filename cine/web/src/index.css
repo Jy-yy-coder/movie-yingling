@@ -1294,8 +1294,8 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   color: var(--color-dust-500); border: 1px solid rgba(255, 255, 255, 0.12); transition: var(--ease-ui);
 }
 .explore-back:hover { color: var(--color-gold-300); border-color: rgba(240, 217, 160, 0.4); }
-.explore-body { flex: 1; min-height: 0; overflow: auto; }
-.explore-body.exp-noscroll { overflow: hidden; display: flex; flex-direction: column; }
+.explore-body { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }   /* 始终预留滚动条位，四个 Tab 居中基准一致 */
+.explore-body.exp-noscroll { overflow: hidden; display: flex; flex-direction: column; padding-right: 9px; }   /* 无滚动条时补 9px 占位，对齐其他 Tab */
 .exp-wrap { width: min(1120px, 100%); margin: 0 auto; padding: 30px clamp(18px, 4vw, 40px) 60px; }
 .exp-wrap-narrow { width: min(1120px, 100%); }   /* 与首页/电影库同一 1120 内容列；.account>* 自身限宽 860 */
 
@@ -1444,7 +1444,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 /* ---- 嵌入探索模式的面板覆盖（去掉整屏定位） ---- */
 .list.embed { position: static; padding: 6px 0 30px; overflow: visible; }
 .account.embed { position: static; padding: 6px 0 30px; overflow: visible; align-items: flex-start; }   /* 左缘与 1120 内容列对齐 */
-.chat.embed { position: static; flex: 1; min-height: 0; width: min(1120px, 100%); margin: 0 auto; padding: 18px clamp(18px, 4vw, 40px) 22px; }
+.chat.embed { position: static; flex: 1; min-height: 0; width: min(1120px, 100%); margin: 0 auto; padding: 30px clamp(18px, 4vw, 40px) 22px; }   /* 顶留白 30px 与首页/电影库/我的对齐 */
 .chat.embed { align-items: stretch; }          /* 与首页/电影库同一 1040 内容列，不再 900 居中 */
 .chat.embed > * { width: 100%; }
 
