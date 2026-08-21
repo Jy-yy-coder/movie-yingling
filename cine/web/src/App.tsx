@@ -44,12 +44,24 @@ export default function App() {
   const setPlanets = useGalaxy((s) => s.setPlanets)
   const setBooted = useGalaxy((s) => s.setBooted)
   const setSelected = useGalaxy((s) => s.setSelected)
+  const [galaxyErr, setGalaxyErr] = useState(false)
 
   /* 首帧：加载 5000 颗星球（590 核心 + 库外精选）+ 判断是否需要开场 */
   useEffect(() => {
-    void galaxy().then((d) => { buildLayout(d.planets); setPlanets(d.planets) }).catch(() => { /* 后端未启时静默 */ })
+    let alive = true
+    void galaxy()
+      .then((d) => { buildLayout(d.planets); if (alive) { setPlanets(d.planets); setGalaxyErr(false) } })
+      .catch(() => { if (alive) setGalaxyErr(true) })   // 后端未启/断网：明确提示而非静默空白
+    return () => { alive = false }
+  }, [setPlanets])
+  useEffect(() => {
     if (sessionStorage.getItem('cine_booted')) setBooted(true)
-  }, [setPlanets, setBooted])
+  }, [setBooted])
+
+  const retryGalaxy = () => {
+    setGalaxyErr(false)
+    void galaxy().then((d) => { buildLayout(d.planets); setPlanets(d.planets) }).catch(() => setGalaxyErr(true))
+  }
 
   /* 进入详情页前记住来源页（详情页退出时回到来源，而不是一律跳回银河） */
   useEffect(() => {
@@ -73,6 +85,15 @@ export default function App() {
     <>
       <GalaxyScene />
       <HUD />
+      {galaxyErr && (
+        <div
+          className="glass"
+          style={{ position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 60, display: 'flex', gap: 12, alignItems: 'center', padding: '10px 18px', borderRadius: 14, fontSize: 13 }}
+        >
+          <span>⚠ 银河数据加载失败，请确认后端已启动（端口 8010）</span>
+          <button className="t-mono" style={{ cursor: 'pointer' }} onClick={retryGalaxy}>重试</button>
+        </div>
+      )}
       <AnimatePresence>
         {route.path === '/movie' && route.params.id && (
           <Detail key={route.params.id} id={route.params.id} />

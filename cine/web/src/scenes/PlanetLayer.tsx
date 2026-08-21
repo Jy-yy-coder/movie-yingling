@@ -97,6 +97,20 @@ export default function PlanetLayer({ planets }: { planets: Planet[] }) {
     /* 只有核心 590 部可进详情页，库外片仅悬浮展示信息 */
     if (p && (p.k ?? 1) >= 1) location.hash = '#/movie/' + p.id
   }
+  /* 按下/抬起位移判定：拖转地球（移动 > 6px）不触发点击导航 */
+  const downPos = useRef<{ x: number; y: number } | null>(null)
+  const down = (e: { clientX: number; clientY: number }) => {
+    downPos.current = { x: e.clientX, y: e.clientY }
+  }
+  const up = (e: { index?: number; clientX: number; clientY: number }) => {
+    const d = downPos.current
+    downPos.current = null
+    if (!d) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (dx * dx + dy * dy > 36) return   // 拖转，非点击
+    click(e)
+  }
 
   if (!planets.length) return null
 
@@ -106,7 +120,8 @@ export default function PlanetLayer({ planets }: { planets: Planet[] }) {
       frustumCulled={false}
       onPointerMove={(e) => { e.stopPropagation(); hit(e) }}
       onPointerOut={leave}
-      onPointerDown={(e) => { e.stopPropagation(); click(e) }}
+      onPointerDown={(e) => { e.stopPropagation(); down(e) }}
+      onPointerUp={(e) => { e.stopPropagation(); up(e) }}
     >
       <shaderMaterial
         ref={matRef}

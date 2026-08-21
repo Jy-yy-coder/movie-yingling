@@ -33,7 +33,9 @@ function PointsRaycast() {
   return null
 }
 
-/* 相机飞行：聚焦星域/星系/选中星球时平滑推近，清除时拉回全景 */
+/* 相机飞行：聚焦星域/星系/选中星球时平滑推近。
+   只在「飞行窗口」内接管相机：目标变化时启动，到位或用户手动操作（拖转/滚轮）即交还，
+   此后滚轮缩放完全由用户掌控（修复缩放被每帧弹回的问题）。 */
 function CameraRig() {
   const controlsRef = useRef<OrbitControlsImpl>(null!)
   const focusRegion = useGalaxy((s) => s.focusRegion)
@@ -48,20 +50,27 @@ function CameraRig() {
     return p ? planetPos(p) : null
   }, [selectedId, planets])
 
+  /* 飞行状态用 ref 承载，避免 useFrame 闭包过期；复用临时向量减少 GC 压力 */
+  const flyingRef = useRef(true)
+  const flightKey = `${focusRegion}|${focusGenre}|${selectedId}`
+  useEffect(() => { flyingRef.current = true }, [flightKey])
+  const dirTmp = useMemo(() => new THREE.Vector3(), [])
+  const targetTmp = useMemo(() => new THREE.Vector3(), [])
+  const desiredTmp = useMemo(() => new THREE.Vector3(), [])
+
   useFrame(() => {
     const c = controlsRef.current
-    if (!c) return
-    const targetV = selectedPos
-      ? new THREE.Vector3(selectedPos.x, selectedPos.y, selectedPos.z)
-      : new THREE.Vector3(desired.x, desired.y, desired.z)
+    if (!c || !flyingRef.current) return
+    const sp = selectedPos
+    targetTmp.set(sp ? sp.x : desired.x, sp ? sp.y : desired.y, sp ? sp.z : desired.z)
     const cam = c.object
-    const wantDist = selectedPos ? 6 : focusRegion ? 30 : 96
-    const dir = cam.position.clone().sub(targetV)
-    dir.normalize()
-    const desiredPos = targetV.clone().add(dir.multiplyScalar(Math.max(wantDist, 3)))
-    cam.position.lerp(desiredPos, 0.05)
-    c.target.lerp(targetV, 0.07)
+    const wantDist = sp ? 6 : focusRegion ? 30 : 96
+    dirTmp.copy(cam.position).sub(targetTmp).normalize()
+    desiredTmp.copy(targetTmp).add(dirTmp.multiplyScalar(Math.max(wantDist, 3)))
+    cam.position.lerp(desiredTmp, 0.05)
+    c.target.lerp(targetTmp, 0.07)
     c.update()
+    if (cam.position.distanceTo(desiredTmp) < 0.4) flyingRef.current = false   // 到位即放手
   })
   return (
     <OrbitControls
@@ -71,7 +80,7 @@ function CameraRig() {
       dampingFactor={0.08}
       minDistance={8}
       maxDistance={300}
-      onStart={() => setInteracting(true)}
+      onStart={() => { setInteracting(true); flyingRef.current = false }}   // 用户接管，取消飞行
       onEnd={() => setTimeout(() => setInteracting(false), 260)}
     />
   )

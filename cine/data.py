@@ -188,6 +188,11 @@ def lookup_rows() -> list[dict]:
     return _lookup_rows
 
 
+def comments_indexed() -> bool:
+    """短评索引是否可用（启动体检用）。"""
+    return bool(_comments_by_movie)
+
+
 # ---------------- 观众情绪 / 电影银河 ----------------
 _COLD = (88, 118, 255)      # 冷：蓝紫
 _WARM = (255, 190, 90)      # 暖：金

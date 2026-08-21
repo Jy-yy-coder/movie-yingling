@@ -72,6 +72,14 @@ SYSTEM_PROMPT_MOVIE = """你是影灵CINE电影助手，正在回答用户关于
 - 简短自然，像朋友聊天，不写百科腔。
 """
 
+SYSTEM_PROMPT_MOVIE_SAFE = """你是影灵CINE电影助手，用户开启了无剧透模式，正在了解某部电影。
+必须遵守：
+- 只讲口碑、DNA 维度、观众反馈与基本信息，严禁透露剧情走向、结局或任何具体情节。
+- 用户问剧情时，说明"无剧透模式下先不聊剧情，看完欢迎回来找你聊"，并自然转向口碑话题。
+- 只许改述事实卡片中的信息，不新增事实。
+- 简短自然，像朋友聊天。
+"""
+
 SYSTEM_PROMPT_SEARCH = """你是影灵CINE电影助手。基于用户问题与检索命中的短评片段回答。
 必须遵守：
 - 只可改述检索结果中出现的电影名和评论原文，不可编造评论或新增电影。
@@ -172,14 +180,17 @@ def _history_seen_ids(history: list[dict] | None) -> set[str]:
     return seen
 
 
-def _movie_card(m):
+def _movie_card(m, safe: bool = False):
+    """事实卡。safe=True（无剧透模式）时不下发剧情简介——prompt 层与输出层同时断掉剧透源。"""
     d = m["dna"]
     dims = " ".join(f"{k}{d[k]}" for k in recommend.DNA_DIMS)
     lines = [f"《{m['title']}》({m['year']}) 豆瓣 {m['rating']}"]
     lines.append(f"DNA: {dims}")
     if m.get("runtime_min"):
         lines.append(f"片长: {m['runtime_min']}分钟")
-    if m.get("summary") or m.get("brief"):
+    if safe:
+        lines.append("简介: （无剧透模式已开启，剧情简介不对此模式开放）")
+    elif m.get("summary") or m.get("brief"):
         lines.append("简介: " + (m.get("summary") or m.get("brief") or "").strip())
     up = (m.get("quotes") or {}).get("up1")
     if up:
@@ -225,6 +236,10 @@ def _citations_for(m, n=2, spoiler=True):
     return out[:n]
 
 
+# 推荐意图关键词：命中时电影名解析关闭「弱反向包含」，避免口语推荐句被短标题劫持
+_REC_INTENT_HINT = re.compile(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|换两部|换几部")
+
+
 def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: list | None = None,
                 movie_context: dict | None = None, user_profile: dict | None = None,
                 like_genres: dict | None = None):
@@ -241,14 +256,14 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
 
     history = history or []
 
-    # —— 优先处理：有电影上下文时的追问 ——
-    if movie_context and _is_followup(msg):
+    # —— 优先处理：有电影上下文时的追问（推荐/换片类 chip 让位给推荐链路）——
+    if movie_context and _is_followup(msg) and not _REC_INTENT_HINT.search(msg):
         m = movie_context["data"]
         kind = "core" if "movie_id" in m and not m.get("ext") else "ext"
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
 
-    # —— 意图 1：电影名解析（库内优先，库外兜底）——
-    kind, m = search.resolve_title(msg)
+    # —— 意图 1：电影名解析（库内优先，库外兜底；推荐句关闭弱匹配防劫持）——
+    kind, m = search.resolve_title(msg, allow_weak=not _REC_INTENT_HINT.search(msg))
     if m is not None:
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
 
@@ -269,7 +284,7 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
 
     # —— 意图 3：推荐 ——
     hint = recommend.parse_hint(msg)
-    if hint["dim"] or hint["genre"] or hint["region"] or re.search(r"推荐|来部|有没有|好看|看看|适合", msg):
+    if hint["dim"] or hint["genre"] or hint["region"] or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合", msg):
         return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
 
     # —— 意图 4：追问/跟进（无电影上下文时）——
@@ -295,11 +310,15 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
             "offline": True, "citations": [], "kind": "help"}
 
 
-def _build_enhanced_system(base_system: str, movie_context: dict | None = None) -> str:
-    """构建增强版系统提示词，注入电影上下文。"""
+def _build_enhanced_system(base_system: str, movie_context: dict | None = None, safe: bool = False) -> str:
+    """构建增强版系统提示词，注入电影上下文。safe=True 时剔除上下文里的剧情简介行。"""
     if not movie_context:
         return base_system
-    return base_system + "\n\n" + movie_context["prompt_text"]
+    text = movie_context["prompt_text"]
+    if safe:
+        text = "\n".join(ln for ln in text.splitlines()
+                         if not ln.startswith("简介：") and not ln.startswith("简介:"))
+    return base_system + "\n\n" + text
 
 
 def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_context=None):
@@ -308,7 +327,8 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
         up = (m.get("quotes") or {}).get("up1")
         dn = (m.get("quotes") or {}).get("dn1")
         warn = m.get("warn")
-        facts = _movie_card(m)
+        # 无剧透开启时：事实卡与上下文注入都不含剧情简介（prompt 层断源）
+        facts = _movie_card(m, safe=spoiler)
         # 构建增强版系统提示词；评论依据只在用户想看评论时附带，避免无关评论卡堆在回复下方
         want_quotes = bool(_QUOTE_INTENT.search(msg))
         if mode == "talk":
@@ -318,7 +338,7 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
                                + (f"，好评区有人这么讲「{up['text'][:30]}…」" if up else "")
                                + (f"。提前打预防针：{warn['text']}" if warn else "。")
                                + "想深聊剧情的话，可以关掉无剧透模式～")
-                system = _build_enhanced_system(SYSTEM_PROMPT_TALK_SAFE, movie_context)
+                system = _build_enhanced_system(SYSTEM_PROMPT_TALK_SAFE, movie_context, safe=True)
                 offline, text, model = _polish(system,
                                                f"用户问：{msg}\n\n该片事实:\n{facts}", cits,
                                                offline_txt=offline_txt, history=history, temperature=0.7)
@@ -335,9 +355,11 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
             return {"text": text, "offline": offline, "citations": cits, "kind": "talk",
                     "model": model, "movie_id": m["movie_id"], "movie": _rec_card(m),
                     "follow_ups": _follow_ups_for(m, spoiler)}
-        # 默认（推荐模式）问答：卡片式陈述
+        # 默认（推荐模式）问答：卡片式陈述；无剧透开启时换安全提示词 + 简介不出
         cits = _citations_for(m, 2, spoiler) if want_quotes else []
-        system = _build_enhanced_system(SYSTEM_PROMPT_MOVIE, movie_context)
+        system = _build_enhanced_system(
+            SYSTEM_PROMPT_MOVIE_SAFE if spoiler else SYSTEM_PROMPT_MOVIE,
+            movie_context, safe=spoiler)
         offline, text, model = _polish(
             system,
             f"用户问：{msg}\n\n该片事实:\n{facts}", cits, offline_txt=facts, history=history)
@@ -384,7 +406,7 @@ def watch_opening(movie_id: str, spoiler: bool = True):
                    if s.get("temp") is not None else "。")
                 + "你看到哪了？随时喊我聊～")
     offline, text, model = _polish(
-        SYSTEM_PROMPT_OPENING, f"该片事实:\n{_movie_card(m)}", [],
+        SYSTEM_PROMPT_OPENING, f"该片事实:\n{_movie_card(m, safe=spoiler)}", [],
         offline_txt=template, temperature=0.7)
     return {"text": text, "offline": offline, "model": model, "kind": "watch_opening",
             "citations": [], "chips": _follow_ups_for(m, spoiler),

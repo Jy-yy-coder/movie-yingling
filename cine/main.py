@@ -5,6 +5,7 @@
 from __future__ import annotations
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 import time
@@ -12,31 +13,58 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import chat as chat_mod
-from . import data, personality, recommend, search
+from . import data, llm as llm_mod, personality, recommend, search
 
 app = FastAPI(title="影灵 CINE", version="0.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-STATIC_DIR = Path(__file__).resolve().parent / "web" / "dist"   # 电影宇宙前端构建产物
 WEB_DIST = Path(__file__).resolve().parent / "web" / "dist"
-# 电影宇宙前端构建产物存在时优先托管（旧 static 备份于 static_legacy）
+_STATIC_FALLBACK = Path(__file__).resolve().parent / "static"
+_STATIC_LEGACY = Path(__file__).resolve().parent / "static_legacy"
+# 优先 React 构建产物；缺失时回退到旧 SPA，避免克隆仓库后无法启动
 if (WEB_DIST / "index.html").exists():
+    STATIC_DIR = WEB_DIST
+elif (_STATIC_FALLBACK / "index.html").exists():
+    STATIC_DIR = _STATIC_FALLBACK
+elif (_STATIC_LEGACY / "index.html").exists():
+    STATIC_DIR = _STATIC_LEGACY
+else:
     STATIC_DIR = WEB_DIST
 DB_PATH = Path(__file__).resolve().parent / "data" / "cine.db"
 
 # ---------------- 启动 ----------------
 @app.on_event("startup")
 def _startup():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     data.load()
     _init_db()
+    _health_log()
+
+
+def _health_log():
+    """启动体检：一行日志说清 AI/各数据资产可用性，现场可区分「AI 挂了」还是「数据挂了」。"""
+    log = logging.getLogger("cine.startup")
+    log.info("[体检] LLM key: %s | 向量检索: %s | 短评FTS: %s | 库外索引: %s（%d 部） | 评论索引: %s",
+             "可用" if llm_mod.has_key() else "缺失→离线模式",
+             "可用" if (data.ENRICHED / "movie_vectors.npz").exists() else "缺失→语义检索降级",
+             "可用" if data.FTS_DB.exists() else "缺失→评论搜索不可用",
+             "可用" if data.lookup_rows() else "缺失→仅 590 核心星球",
+             len(data.lookup_rows()),
+             "可用" if data.comments_indexed() else "缺失→详情页无评论")
+
 
 def _conn():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    return sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=5)
+    con.execute("PRAGMA busy_timeout=5000")
+    con.execute("PRAGMA journal_mode=WAL")
+    return con
 
 def _init_db():
     con = _conn()
@@ -83,6 +111,13 @@ def _init_db():
             kind TEXT NOT NULL,
             created_at TEXT);
     """)
+    # 游客行 device_id 唯一化（部分索引，不影响「游客+注册并存」的合并语义）。
+    # 旧库若已有重复游客行则建索引失败，注册合并会逐步清理，此处静默跳过。
+    try:
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_guest_device "
+                    "ON users(device_id) WHERE phone IS NULL AND device_id IS NOT NULL")
+    except sqlite3.IntegrityError:
+        pass
     con.close()
 
 def _token(uid, phone):
@@ -244,8 +279,8 @@ def _load_conversation_history(conversation_id: int, uid: int, limit: int = 24) 
         return []
 
 
-def _load_movie_context(movie_id: str | None) -> dict | None:
-    """加载电影上下文，供 Prompt 注入。"""
+def _load_movie_context(movie_id: str | None, spoiler: bool = True) -> dict | None:
+    """加载电影上下文，供 Prompt 注入。无剧透开启时不下发剧情简介（防 prompt 层泄漏）。"""
     if not movie_id:
         return None
     m = data.movie(movie_id)
@@ -263,7 +298,7 @@ def _load_movie_context(movie_id: str | None) -> dict | None:
         lines.append(f"主演：{' / '.join(m['actors'][:4])}")
     if m.get("genres"):
         lines.append(f"类型：{' / '.join(m['genres'])} | 地区：{m['region']}")
-    if m.get("summary"):
+    if m.get("summary") and not spoiler:
         lines.append(f"简介：{m['summary'][:120]}")
     lines.append(f"DNA：{dims}")
     # 好评
@@ -277,16 +312,20 @@ def _load_movie_context(movie_id: str | None) -> dict | None:
     return {"movie_id": movie_id, "prompt_text": "\n".join(lines), "data": m}
 
 
-def _save_conversation_message(conversation_id: int, role: str, content: str, movie_ids: str | None = None):
-    """保存消息到 conversation_messages 表。"""
-    con = _conn()
+def _save_conversation_message(conversation_id: int, role: str, content: str,
+                               movie_ids: str | None = None, con: sqlite3.Connection | None = None):
+    """保存消息到 conversation_messages 表。传入 con 时复用外部连接/事务（调用方负责 commit）。"""
+    own = con is None
+    if own:
+        con = _conn()
     now = time.strftime("%F %T")
     con.execute(
         "INSERT INTO conversation_messages(conversation_id, role, content, movie_ids, created_at) "
         "VALUES(?,?,?,?,?)",
         (conversation_id, role, content[:2000], movie_ids, now))
     con.execute("UPDATE conversations SET updated_at=? WHERE id=?", (now, conversation_id))
-    con.commit(); con.close()
+    if own:
+        con.commit(); con.close()
 
 
 @app.post("/api/chat")
@@ -308,7 +347,7 @@ def api_chat(body: ChatIn):
     if not movie_id and conv_id:
         row = _conn().execute("SELECT movie_id FROM conversations WHERE id=?", (conv_id,)).fetchone()
         movie_id = row[0] if row else None
-    movie_ctx = _load_movie_context(movie_id)
+    movie_ctx = _load_movie_context(movie_id, spoiler=body.spoiler)
 
     # 加载人格画像（有则用于推荐候选重排，无则行为不变）
     user_profile = None
@@ -344,23 +383,26 @@ def api_chat(body: ChatIn):
         con.execute("UPDATE conversations SET movie_id=? WHERE id=?", (reply["movie_id"], conv_id))
         con.commit(); con.close()
 
-    # 保存消息到 conversation_messages
-    _save_conversation_message(conv_id, "user", body.message)
-    # assistant 消息，记录推荐的 movie_ids
-    rec_movie_ids = None
-    if reply.get("movies"):
-        rec_movie_ids = json.dumps([m["movie_id"] for m in reply["movies"]])
-    elif reply.get("movie_id"):
-        rec_movie_ids = json.dumps([reply["movie_id"]])
-    _save_conversation_message(conv_id, "assistant", reply["text"][:2000], rec_movie_ids)
-
-    # 同时写入旧 chats 表（兼容账号页历史展示）
+    # 持久化（单连接单事务：conversation_messages 与旧 chats 表同生共死，避免双写分叉）
     con = _conn()
-    con.execute("INSERT INTO chats(user_id,role,content,created_at) VALUES(?,?,?,?)",
-                (uid, "user", body.message[:1000], time.strftime("%F %T")))
-    con.execute("INSERT INTO chats(user_id,role,content,created_at) VALUES(?,?,?,?)",
-                (uid, "assistant", reply["text"][:2000], time.strftime("%F %T")))
-    con.commit(); con.close()
+    try:
+        _save_conversation_message(conv_id, "user", body.message, con=con)
+        # assistant 消息，记录推荐的 movie_ids
+        rec_movie_ids = None
+        if reply.get("movies"):
+            rec_movie_ids = json.dumps([m["movie_id"] for m in reply["movies"]])
+        elif reply.get("movie_id"):
+            rec_movie_ids = json.dumps([reply["movie_id"]])
+        _save_conversation_message(conv_id, "assistant", reply["text"][:2000], rec_movie_ids, con=con)
+        # 同时写入旧 chats 表（兼容账号页历史展示）
+        now = time.strftime("%F %T")
+        con.execute("INSERT INTO chats(user_id,role,content,created_at) VALUES(?,?,?,?)",
+                    (uid, "user", body.message[:1000], now))
+        con.execute("INSERT INTO chats(user_id,role,content,created_at) VALUES(?,?,?,?)",
+                    (uid, "assistant", reply["text"][:2000], now))
+        con.commit()
+    finally:
+        con.close()
 
     # 返回结果，附带 conversation_id
     reply["conversation_id"] = conv_id
@@ -374,9 +416,18 @@ def _resolve_user_id(device_id):
     if row:
         uid = row[0]
     else:
-        cur = con.execute("INSERT INTO users(device_id,token,created_at) VALUES(?,?,?)",
-                          (device_id, _token(0, device_id), time.strftime("%F %T")))
-        uid = cur.lastrowid
+        try:
+            cur = con.execute("INSERT INTO users(device_id,token,created_at) VALUES(?,?,?)",
+                              (device_id, _token(0, device_id), time.strftime("%F %T")))
+            uid = cur.lastrowid
+        except sqlite3.IntegrityError:
+            # 并发首访撞游客唯一索引：另一请求已建行，重读即可
+            row = con.execute("SELECT id FROM users WHERE device_id=? "
+                              "ORDER BY (phone IS NOT NULL) DESC, id", (device_id,)).fetchone()
+            if not row:
+                con.close()
+                raise
+            uid = row[0]
     con.commit(); con.close()
     return uid
 
@@ -570,16 +621,40 @@ def api_sms(body: SmsIn):
         raise HTTPException(400, "手机号格式不对")
     code = "246810"   # 演示期固定验证码
     con = _conn()
-    con.execute("INSERT OR REPLACE INTO sms_codes(phone,code,expires_at) VALUES(?,?,?)",
+    # 显式删旧插新（sms_codes 无 UNIQUE，OR REPLACE 不会替换）
+    con.execute("DELETE FROM sms_codes WHERE phone=?", (body.phone,))
+    con.execute("INSERT INTO sms_codes(phone,code,expires_at) VALUES(?,?,?)",
                 (body.phone, code, time.time() + 600))
     con.commit(); con.close()
-    return {"message": "验证码已发送(演示期固定 246810)", "dev_code": code}
+    return {"message": "验证码已发送(演示期固定 246810)"}
 
 class RegisterIn(BaseModel):
     phone: str
     code: str
     password: str
     device_id: str = ""
+
+def _merge_guest_data(con: sqlite3.Connection, uid: int, device_id: str):
+    """把 device_id 名下游客行（phone IS NULL）的聊天/收藏/人格/信号/会话并入 uid，
+    并删除游客行，避免同 device_id 双行导致路由错乱。注册与登录共用。"""
+    guest_sub = "(SELECT id FROM users WHERE device_id=? AND id!=? AND phone IS NULL)"
+    gargs = (device_id, uid)
+    con.execute(f"UPDATE chats SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
+    con.execute(f"INSERT OR IGNORE INTO favorites(user_id,movie_id,created_at) "
+                f"SELECT ?,movie_id,created_at FROM favorites WHERE user_id IN {guest_sub}",
+                (uid, *gargs))
+    con.execute(f"DELETE FROM favorites WHERE user_id IN {guest_sub}", gargs)
+    # 人格画像：正式账号已有则保留（更可能为新测），否则搬游客的
+    if not con.execute("SELECT 1 FROM user_personality WHERE user_id=? LIMIT 1", (uid,)).fetchone():
+        con.execute(f"UPDATE user_personality SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
+    con.execute(f"DELETE FROM user_personality WHERE user_id IN {guest_sub}", gargs)
+    # 行为信号 / 会话（无唯一约束，直接改属主）
+    con.execute(f"UPDATE user_signals SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
+    con.execute(f"UPDATE conversations SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
+    # 数据已全部迁移，删除游客行，杜绝同 device_id 双行
+    con.execute("DELETE FROM users WHERE device_id=? AND id!=? AND phone IS NULL",
+                (device_id, uid))
+
 
 @app.post("/api/auth/register")
 def api_register(body: RegisterIn):
@@ -601,27 +676,11 @@ def api_register(body: RegisterIn):
     uid = cur.lastrowid
     tok = _token(uid, body.phone)
     con.execute("UPDATE users SET token=? WHERE id=?", (tok, uid))
-    # 游客历史合并：把 device_id 名下「游客行」（phone IS NULL）的数据并入正式账号
-    # （聊天 + 收藏 + 人格 + 行为信号 + 会话），并删除游客行，避免同 device_id 双行
-    # 导致后续路由错乱（聊天/人格/信号写到旧游客行）。已注册账号行不受影响。
+    # 游客历史合并：聊天 + 收藏 + 人格 + 行为信号 + 会话（详见 _merge_guest_data）
     if body.device_id:
-        guest_sub = "(SELECT id FROM users WHERE device_id=? AND id!=? AND phone IS NULL)"
-        gargs = (body.device_id, uid)
-        con.execute(f"UPDATE chats SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
-        con.execute(f"INSERT OR IGNORE INTO favorites(user_id,movie_id,created_at) "
-                    f"SELECT ?,movie_id,created_at FROM favorites WHERE user_id IN {guest_sub}",
-                    (uid, *gargs))
-        con.execute(f"DELETE FROM favorites WHERE user_id IN {guest_sub}", gargs)
-        # 人格画像：正式账号已有则保留（更可能为新测），否则搬游客的
-        if not con.execute("SELECT 1 FROM user_personality WHERE user_id=? LIMIT 1", (uid,)).fetchone():
-            con.execute(f"UPDATE user_personality SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
-        con.execute(f"DELETE FROM user_personality WHERE user_id IN {guest_sub}", gargs)
-        # 行为信号 / 会话（无唯一约束，直接改属主）
-        con.execute(f"UPDATE user_signals SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
-        con.execute(f"UPDATE conversations SET user_id=? WHERE user_id IN {guest_sub}", (uid, *gargs))
-        # 数据已全部迁移，删除游客行，杜绝同 device_id 双行
-        con.execute("DELETE FROM users WHERE device_id=? AND id!=? AND phone IS NULL",
-                    (body.device_id, uid))
+        _merge_guest_data(con, uid, body.device_id)
+    # 验证码用后即销毁，防 600 秒内重放
+    con.execute("DELETE FROM sms_codes WHERE phone=?", (body.phone,))
     con.commit(); con.close()
     return {"token": tok, "user_id": uid, "merged": bool(body.device_id)}
 
@@ -629,6 +688,7 @@ class LoginIn(BaseModel):
     phone: str
     password: str = ""
     code: str = ""
+    device_id: str = ""   # 提供时把该设备的游客数据合并进登录账号（跨设备不丢历史）
 
 @app.post("/api/auth/login")
 def api_login(body: LoginIn):
@@ -640,6 +700,7 @@ def api_login(body: LoginIn):
             con.close(); raise HTTPException(400, "验证码错误或过期")
         if not con.execute("SELECT 1 FROM users WHERE phone=?", (body.phone,)).fetchone():
             con.close(); raise HTTPException(400, "该手机号尚未注册，请先注册")
+        con.execute("DELETE FROM sms_codes WHERE phone=?", (body.phone,))   # 用后即销毁
     else:
         ph = hashlib.sha256(body.password.encode()).hexdigest()
         if not con.execute("SELECT 1 FROM users WHERE phone=? AND pass_hash=?",
@@ -648,8 +709,13 @@ def api_login(body: LoginIn):
     row = con.execute("SELECT id FROM users WHERE phone=?", (body.phone,)).fetchone()
     tok = _token(row[0], body.phone)
     con.execute("UPDATE users SET token=? WHERE id=?", (tok, row[0]))
+    # 最小合并补丁：登录也接管本机游客数据（此前只有注册会合并，跨设备登录即「人设蒸发」）
+    merged = False
+    if body.device_id:
+        _merge_guest_data(con, row[0], body.device_id)
+        merged = True
     con.commit(); con.close()
-    return {"token": tok, "user_id": row[0]}
+    return {"token": tok, "user_id": row[0], "merged": merged}
 
 @app.get("/api/account")
 def api_account(token: str = ""):
@@ -706,6 +772,10 @@ def api_feedback(body: FeedbackIn, token: str = ""):
     kind = body.kind if body.kind in ("fav", "unfav", "view", "pick") else "view"
     con.execute("INSERT INTO user_signals(user_id,movie_id,kind,created_at) VALUES(?,?,?,?)",
                 (row[0], body.movie_id, kind, time.strftime("%F %T")))
+    # 有界保留最近 200 条，防止 view 信号无界增长拖慢聊天热路径的画像计算
+    con.execute("DELETE FROM user_signals WHERE user_id=? AND id NOT IN "
+                "(SELECT id FROM user_signals WHERE user_id=? ORDER BY id DESC LIMIT 200)",
+                (row[0], row[0]))
     con.commit(); con.close()
     return {"ok": True}
 
@@ -788,6 +858,15 @@ def _signal_genres(uid: int) -> dict | None:
 
 # ---------------- 静态资源 ----------------
 BASE = Path(__file__).resolve().parent.parent
-app.mount("/posters_thumb", StaticFiles(directory=str(BASE / "data" / "enriched" / "posters_thumb")), name="thumbs")
-app.mount("/posters", StaticFiles(directory=str(BASE / "data" / "posters")), name="posters")
+_POSTERS_THUMB = BASE / "data" / "enriched" / "posters_thumb"
+_POSTERS = BASE / "data" / "posters"
+# 海报目录可能被 gitignore；缺失时建空目录，避免 import 即崩
+_POSTERS_THUMB.mkdir(parents=True, exist_ok=True)
+_POSTERS.mkdir(parents=True, exist_ok=True)
+if not (STATIC_DIR / "index.html").exists():
+    raise RuntimeError(
+        f"前端静态目录不可用: {STATIC_DIR}（请先 cd cine/web && npm install && npm run build）"
+    )
+app.mount("/posters_thumb", StaticFiles(directory=str(_POSTERS_THUMB)), name="thumbs")
+app.mount("/posters", StaticFiles(directory=str(_POSTERS)), name="posters")
 app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

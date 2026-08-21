@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { guest, login, register, sms, setToken } from '../api'
 
@@ -14,6 +14,10 @@ export default function Login() {
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState('')
   const [countdown, setCountdown] = useState(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  /* 卸载时清理验证码倒计时，避免泄漏的 setState */
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
   const tip = (s: string) => { setToast(s); setTimeout(() => setToast(''), 3200) }
 
@@ -22,9 +26,10 @@ export default function Login() {
     setBusy(true)
     try {
       const r = await sms(phone)
-      tip(r.message + '（' + r.dev_code + '）')
+      tip(r.message)
       setCountdown(60)
-      const t = setInterval(() => setCountdown((c) => { if (c <= 1) clearInterval(t); return c - 1 }), 1000)
+      if (timerRef.current) clearInterval(timerRef.current)
+      timerRef.current = setInterval(() => setCountdown((c) => { if (c <= 1) { if (timerRef.current) clearInterval(timerRef.current); return 0 } return c - 1 }), 1000)
     } catch (e) {
       tip((e as Error).message)
     } finally {
@@ -56,7 +61,7 @@ export default function Login() {
     try {
       const r = await login(phone, pass)
       setToken(r.token)
-      tip('登录成功 ✨')
+      tip(r.merged ? '登录成功，本机游客记录已并入 ✨' : '登录成功 ✨')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {
       tip((e as Error).message)

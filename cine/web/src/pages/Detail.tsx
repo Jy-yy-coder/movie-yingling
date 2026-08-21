@@ -130,6 +130,37 @@ export default function Detail({ id }: { id: string }) {
             </div>
           )}
 
+          {/* 观众情绪宇宙：温度 + 高频情绪词（sentiment.json 真实统计，非装饰） */}
+          {s && ((s.emotions?.length ?? 0) > 0 || s.temp != null) && (
+            <div className="detail-block">
+              <div className="detail-block-title">观众情绪宇宙</div>
+              <div className="emo-grid">
+                <div className="emo-temp glass">
+                  <span className="emo-temp-label">情绪温度</span>
+                  <div className="emo-temp-ring">
+                    <div className="emo-temp-ring-inner"><b>{s.temp}</b><span>/100</span></div>
+                  </div>
+                  <span className="t-mono" style={{ fontSize: 11, color: '#8a93ad' }}>
+                    {(s.temp ?? 50) >= 55 ? '偏暖 · 观众整体满意' : (s.temp ?? 50) <= 45 ? '偏冷 · 口碑有分歧' : '温和 · 褒贬均衡'}
+                  </span>
+                </div>
+                {(s.emotions?.length ?? 0) > 0 && (
+                  <div className="emo-freq glass">
+                    <div className="emo-chart-title">高频情绪词</div>
+                    <div className="emo-freq-list">
+                      {s.emotions.slice(0, 6).map((e) => (
+                        <div className="emo-freq-item" key={e.w}>
+                          <span className="emo-freq-word">{e.w}</span>
+                          <i><i style={{ width: `${Math.round((e.n / (s.emotions[0]?.n || 1)) * 100)}%` }} /></i>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* 真实短评：优先用 top_comments（各3条），降级用 quotes（各1条） */}
           {(m.top_comments?.up?.length || m.top_comments?.dn?.length || up1 || dn1) && (
             <div className="detail-block">

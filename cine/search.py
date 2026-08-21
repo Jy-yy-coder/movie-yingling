@@ -87,19 +87,45 @@ def suggest(q: str, limit=8):
     return res
 
 
-def resolve_title(name: str):
+def resolve_title(name: str, allow_weak: bool = True):
     """把一句话里的电影名解析到 590 库内或库外电影（聊天用）。
-    豆瓣标题常带外文后缀（如「千与千寻 千と千尋の神隠し」），故同时按"主名"（空格前段）匹配。"""
+    豆瓣标题常带外文后缀（如「千与千寻 千と千尋の神隠し」），故同时按"主名"（空格前段）匹配。
+    匹配强度分级：精确 > 前向包含（输入是标题子串）> 弱反向包含（句子含完整片名）。
+    allow_weak=False 时关闭弱反向包含——口语推荐句（如「活着好累想看治愈的」）不再被
+    2~3 字短标题（《活着》《过年》）劫持成单片问答。"""
     nn = _NORM(name)
     if not nn:
         return (None, None)
-    for m in data.all_movies():
+    # 《》显式引用优先：书名号内的名字按精确/前向匹配
+    qm = re.search(r"[《<]([^》>]{1,30})[》>]", name)
+    if qm:
+        qn = _NORM(qm.group(1))
+        if qn:
+            for m in data.all_movies():
+                tn = _NORM(m["title"])
+                sn = _NORM(m["title"].split(" ", 1)[0])
+                if qn == tn or qn == sn or qn in tn:
+                    return ("core", m)
+    ms = data.all_movies()
+    # 第一遍：精确匹配（整名或主名）
+    for m in ms:
         tn = _NORM(m["title"])
         sn = _NORM(m["title"].split(" ", 1)[0])
         if nn == tn or nn == sn:
             return ("core", m)
-        if nn in tn or tn in nn or nn in sn or sn in nn:
+    # 第二遍：前向包含（输入 ⊂ 标题）
+    for m in ms:
+        tn = _NORM(m["title"])
+        sn = _NORM(m["title"].split(" ", 1)[0])
+        if (nn in tn or nn in sn) and nn:
             return ("core", m)
+    # 第三遍：弱反向包含（句子 ⊃ 完整片名），仅 ≥3 字标题且显式允许
+    if allow_weak:
+        for m in ms:
+            tn = _NORM(m["title"])
+            sn = _NORM(m["title"].split(" ", 1)[0])
+            if (len(tn) >= 3 and tn in nn) or (len(sn) >= 3 and sn in nn):
+                return ("core", m)
     # 库外
     for r in data.lookup_rows():
         if nn == r["title_norm"]:

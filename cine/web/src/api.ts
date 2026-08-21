@@ -112,12 +112,14 @@ export const watchOpening = (movieId: string, spoiler = true) =>
   get<WatchOpening>(`/api/watch/opening?movie_id=${encodeURIComponent(movieId)}&spoiler=${spoiler}`)
 
 /* ---------- 账号 ---------- */
-export const guest = () => post<{ token: string; device_id: string; is_guest: boolean }>('/api/auth/guest', { device_id: deviceId() })
+export const guest = () =>
+  post<{ token: string; device_id: string; is_guest: boolean }>('/api/auth/guest', { device_id: deviceId() })
+    .then((r) => { setToken(r.token); return r })   // 游客入口立即落 token，账号/收藏即刻可用
 export const login = (phone: string, password = '', code = '') =>
-  post<{ token: string; user_id: number }>('/api/auth/login', { phone, password, code })
+  post<{ token: string; user_id: number; merged: boolean }>('/api/auth/login', { phone, password, code, device_id: deviceId() })
 export const register = (phone: string, code: string, password: string) =>
   post<{ token: string; user_id: number; merged: boolean }>('/api/auth/register', { phone, code, password, device_id: deviceId() })
-export const sms = (phone: string) => post<{ message: string; dev_code: string }>('/api/auth/sms', { phone })
+export const sms = (phone: string) => post<{ message: string }>('/api/auth/sms', { phone })
 export const logout = () => setToken('')
 export const isLoggedIn = () => Boolean(token())
 
