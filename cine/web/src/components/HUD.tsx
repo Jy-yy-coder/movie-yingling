@@ -23,13 +23,6 @@ export default function HUD() {
 
   return (
     <>
-      {/* ---------- 平台定位标语 + 关于入口 ---------- */}
-      <div className="hud-brand glass">
-        <b>影灵 CINE · 电影银河</b>
-        <span>AI 导航员陪你从 5000 颗星球中，找到今晚的那部片</span>
-        <a href="#/about">关于平台 →</a>
-      </div>
-
       {/* ---------- 星图筛选面板 ---------- */}
       <div className="hud-filter glass">
         <div className="hud-filter-title">星图</div>
