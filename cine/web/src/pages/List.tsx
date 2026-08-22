@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cnTitle, DNA_DIMS, movies } from '../api'
+import { regionLabel } from '../regions'
 import type { Movie } from '../types'
 
 /* 列表页 #/list：地区 / 类型 / 年份 / 评分 / DNA 排序筛选 + 分页 */
 
-const REGIONS = ['华语', '日本', '韩国', '欧美']
+const REGIONS = ['中国', '日本', '韩国', '欧洲', '美国', '其他']
 const GENRES = ['剧情', '喜剧', '动作', '爱情', '科幻', '犯罪', '悬疑', '动画', '奇幻', '家庭', '战争', '恐怖']
 const SORTS = [
   { key: 'dna', label: 'DNA 综合' },
@@ -26,9 +27,12 @@ export function ListPanel({ q, setParam, embed = false }: {
   setParam: (patch: Record<string, string>) => void
   embed?: boolean
 }) {
-  const [data, setData] = useState<{ total: number; page: number; items: Movie[] } | null>(null)
+  const [data, setData] = useState<{ total: number; page: number; items: Movie[]; fallback?: boolean } | null>(null)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
+  /* 搜索词本地编辑态：可修改/清除（此前搜索词粘住改不了） */
+  const [kw, setKw] = useState(q.q || '')
+  useEffect(() => { setKw(q.q || '') }, [q.q])
 
   useEffect(() => {
     setLoading(true)
@@ -44,11 +48,26 @@ export function ListPanel({ q, setParam, embed = false }: {
   const genre = q.genre || ''
   const sort = q.sort || 'dna'
   const page = Number(q.page) || 1
+  const submitKw = () => {
+    const s = kw.trim()
+    if (s !== (q.q || '')) setParam({ q: s, page: '' })
+  }
+  const clearKw = () => { setKw(''); if (q.q) setParam({ q: '', page: '' }) }
 
   return (
     <div className={'list' + (embed ? ' embed' : '')}>
         <div className="list-head">
           <h2 className="list-title title-gold">{q.q ? `搜索「${q.q}」` : region ? region + ' · ' + (genre || '全部') : '推荐影片'}</h2>
+          <div className="exp-search list-search">
+            <input
+              value={kw}
+              onChange={(e) => setKw(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) submitKw() }}
+              placeholder="搜索电影 / 导演 / 演员 / 心情，多个词用空格分隔"
+            />
+            {q.q && <button className="list-search-clear" onClick={clearKw} title="清除搜索词">✕</button>}
+            <button onClick={submitKw}>搜索</button>
+          </div>
           <div className="list-filters">
             <div className="list-filter-row">
               <span className="list-f-lab">地区</span>
@@ -77,7 +96,19 @@ export function ListPanel({ q, setParam, embed = false }: {
         {loading && <div className="list-loading">正在放映…</div>}
 
         {data && !loading && data.items.length === 0 && (
-          <div className="list-empty">暂无推荐</div>
+          <div className="list-empty">
+            <p className="list-empty-title">{q.q ? `没有找到与「${q.q}」匹配的影片` : '暂无推荐'}</p>
+            {q.q && (
+              <>
+                <p className="list-empty-tip">试试只用片名或导演名，或换个说法（如「治愈」「悬疑」「宫崎骏 治愈」）</p>
+                <a className="list-empty-cta" href="#/explore?tab=chat">去问影灵帮你找 →</a>
+              </>
+            )}
+          </div>
+        )}
+
+        {data && !loading && data.items.length > 0 && q.q && data.fallback && (
+          <div className="list-fallback-note">未找到与「{q.q}」直接匹配的影片，以下按关键词为你推荐</div>
         )}
 
         {data && !loading && data.items.length > 0 && (
@@ -91,7 +122,7 @@ export function ListPanel({ q, setParam, embed = false }: {
                     {m.dna && <b className="list-card-dim t-mono">{DNA_DIMS.reduce((a, d) => (m.dna[d] || 0) > (m.dna[a] || 0) ? d : a, DNA_DIMS[0])} {m.dna[DNA_DIMS.reduce((a, d) => (m.dna[d] || 0) > (m.dna[a] || 0) ? d : a, DNA_DIMS[0])]}</b>}
                   </span>
                   <span className="list-card-title">{cnTitle(m.title)}</span>
-                  <span className="list-card-meta t-mono">{m.year || ''} · {m.region} · {m.genres?.[0] || ''}</span>
+                  <span className="list-card-meta t-mono">{m.year || ''} · {regionLabel(m.region)} · {m.genres?.[0] || ''}</span>
                 </a>
               ))}
             </div>

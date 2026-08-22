@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { cnTitle, DNA_DIMS, movies } from '../api'
+import { cnTitle, DNA_DIMS, movies, suggest } from '../api'
+import { regionLabel } from '../regions'
 import type { Movie } from '../types'
 import { ListPanel } from './List'
 import { ChatPanel } from './Chat'
@@ -73,6 +74,9 @@ export default function Explore() {
     <motion.div className={`overlay explore${theme === 'day' ? ' theme-day' : ''}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5, ease: [0.32, 0.72, 0.35, 1] }}>
       {/* ---------- 顶部导航 ---------- */}
       <header className="explore-nav">
+        <button className="exp-back-btn" onClick={() => { location.hash = '#/' }} title="返回银河">
+          ←<span>返回银河</span>
+        </button>
         <button className="explore-logo" onClick={() => go('home')}>
           影灵<span className="explore-logo-ai t-mono">CINE</span>
         </button>
@@ -138,6 +142,15 @@ function LibStateBridge({ params }: { params: Record<string, string> }) {
   return <ListPanel q={q} setParam={setParam} embed />
 }
 
+/* ---------- 搜索历史（localStorage，最多 8 条） ---------- */
+const H_KEY = 'cine_search_history'
+function loadHistory(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(H_KEY) || '[]'); return Array.isArray(v) ? v.slice(0, 8) : [] } catch { return [] }
+}
+function saveHistory(list: string[]) {
+  try { localStorage.setItem(H_KEY, JSON.stringify(list.slice(0, 8))) } catch { /* ignore */ }
+}
+
 /* ---------- 首页 ---------- */
 function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) {
   const [recs, setRecs] = useState<Movie[]>([])
@@ -145,6 +158,12 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
   const [recPage, setRecPage] = useState(1)
   const [kw, setKw] = useState('')
   const [loadErr, setLoadErr] = useState(false)
+  /* 联想下拉 + 最近搜索 */
+  const [sugs, setSugs] = useState<{ title: string; type: string; movie_id?: string; year?: string }[]>([])
+  const [sugOpen, setSugOpen] = useState(false)
+  const [history, setHistory] = useState<string[]>(loadHistory)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     movies({ sort: 'rating', limit: 12 }).then((d) => { setRail(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
@@ -153,9 +172,47 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
     movies({ sort: 'dna', limit: 10, page: recPage }).then((d) => { setRecs(d.items); setLoadErr(false) }).catch(() => setLoadErr(true))
   }, [recPage])
 
-  const search = () => {
+  /* 点击面板外关闭联想下拉 */
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setSugOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
+  /* 输入防抖联想（250ms，后端 /api/suggest：核心片库 + 库外全库前缀） */
+  useEffect(() => {
+    window.clearTimeout(timerRef.current)
     const q = kw.trim()
-    if (q) go('library', { q })
+    if (!q) { setSugs([]); return }
+    timerRef.current = window.setTimeout(() => {
+      suggest(q).then((r) => setSugs(r.items.slice(0, 8))).catch(() => setSugs([]))
+    }, 250)
+    return () => window.clearTimeout(timerRef.current)
+  }, [kw])
+
+  const commitHistory = (q: string) => {
+    const next = [q, ...history.filter((h) => h !== q)].slice(0, 8)
+    setHistory(next)
+    saveHistory(next)
+  }
+  const clearHistory = () => { setHistory([]); saveHistory([]) }
+
+  const search = (text?: string) => {
+    const q = (text ?? kw).trim()
+    if (!q) return
+    setSugOpen(false)
+    commitHistory(q)
+    go('library', { q })
+  }
+  const pickSug = (s: { title: string; type: string; movie_id?: string }) => {
+    setSugOpen(false)
+    if (s.type === 'core' && s.movie_id) {
+      location.hash = '#/movie/' + s.movie_id   // 核心片直达详情
+    } else {
+      search(s.title)                            // 库外片带入片库搜索
+    }
   }
 
   return (
@@ -163,14 +220,45 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
       {/* 问候 + AI 引导（搜索栏在上，影灵聊天/人格测试两个入口在搜索栏下方） */}
       <div className="exp-hero">
         <h1 className="exp-hi">{greet()}，<span className="title-gold">想看点什么？</span></h1>
-        <div className="exp-search">
-          <input
-            value={kw}
-            onChange={(e) => setKw(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) search() }}
-            placeholder="搜索电影 / 导演 / 演员 / 类型，如「诺兰」「张国荣」「悬疑」"
-          />
-          <button onClick={search}>搜索</button>
+        <div className="exp-search-wrap" ref={boxRef}>
+          <div className="exp-search">
+            <input
+              value={kw}
+              onChange={(e) => setKw(e.target.value)}
+              onFocus={() => setSugOpen(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) search() }}
+              placeholder="搜索电影 / 导演 / 演员 / 类型，如「诺兰」「张国荣」「悬疑」"
+            />
+            <button onClick={() => search()}>搜索</button>
+          </div>
+          {sugOpen && (
+            <div className="exp-sug">
+              {!kw.trim() && history.length > 0 && (
+                <>
+                  <div className="exp-sug-sec">
+                    <span className="exp-sug-lab">最近搜索</span>
+                    <button className="exp-sug-clear" onClick={clearHistory}>清空</button>
+                  </div>
+                  {history.map((h) => (
+                    <button key={h} className="exp-sug-item" onClick={() => { setKw(h); search(h) }}>
+                      <span className="exp-sug-ico">🕘</span>
+                      <span className="exp-sug-title">{h}</span>
+                    </button>
+                  ))}
+                </>
+              )}
+              {kw.trim() && sugs.map((s) => (
+                <button key={s.type + s.title} className="exp-sug-item" onClick={() => pickSug(s)}>
+                  <span className="exp-sug-title">{s.title}</span>
+                  {s.year ? <span className="exp-sug-year t-mono">{s.year}</span> : null}
+                  <span className={`exp-sug-tag${s.type === 'core' ? '' : ' ext'}`}>{s.type === 'core' ? '片库' : '全库'}</span>
+                </button>
+              ))}
+              {kw.trim() && sugs.length === 0 && (
+                <div className="exp-sug-empty">没有「{kw.trim()}」的片名联想，回车按 导演/演员/心情 搜索</div>
+              )}
+            </div>
+          )}
         </div>
         <div className="exp-guide-row">
           <motion.button
@@ -269,7 +357,7 @@ function Card({ m, dim = false }: { m: Movie; dim?: boolean }) {
         {dim && m.dna && <b className="list-card-dim t-mono">{topDim} {m.dna[topDim]}</b>}
       </span>
       <span className="list-card-title">{cnTitle(m.title)}</span>
-      <span className="list-card-meta t-mono">{m.year || ''} · {m.region}</span>
+      <span className="list-card-meta t-mono">{m.year || ''} · {regionLabel(m.region)}</span>
     </motion.a>
   )
 }

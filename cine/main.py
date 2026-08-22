@@ -133,19 +133,54 @@ def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: i
                dim: str = "", dim_min: float = 0, sort: str = "dna", q: str = "",
                page: int = 1, limit: int = 24):
     if q:
-        # 搜索：标题/类型/导演/演员 归一化包含匹配
-        qn = data.norm_title(q)
-        rows = [m for m in data.all_movies()
-                if qn and (qn in data.norm_title(m["title"])
-                           or any(qn in g for g in m["genres"])
-                           or any(qn in d for d in (m.get("director") or []))
-                           or any(qn in a for a in (m.get("actors") or [])))]
-        # 无匹配时保持空结果，前端显示「暂无推荐」（不拿规则推荐兜底，避免搜什么都有结果）
+        # 多词搜索：按空白拆词，结构词（标题/类型/导演/演员）AND 匹配；
+        # 全库都匹配不到结构的词视为心情/关键词——有结构词时在结构命中池内
+        # 按 心情/类型/地区 过滤并按偏好维度排序，无结构词时整体走规则推荐兜底。
+        fallback = False
+        toks = [t for t in (data.norm_title(w) for w in re.split(r"\s+", q.strip())) if t]
+
+        def _hit(m, t):
+            return (t in data.norm_title(m["title"])
+                    or any(t in g for g in m["genres"])
+                    or any(t in d for d in (m.get("director") or []))
+                    or any(t in a for a in (m.get("actors") or [])))
+
+        structural = [t for t in toks if any(_hit(m, t) for m in data.all_movies())]
+        mood_toks = [t for t in toks if t not in structural]
+        if structural:
+            rows = [m for m in data.all_movies() if all(_hit(m, t) for t in structural)]
+            if mood_toks:
+                hint = recommend.parse_hint(" ".join(mood_toks))
+                if hint["dim"] or hint["genre"] or hint["region"]:
+                    if rows:
+                        pool = [m for m in rows
+                                if (not hint["genre"] or any(hint["genre"] == g for g in m["genres"]))
+                                and (not hint["region"] or recommend.region_match(
+                                    m["region"], hint["region"], m.get("countries")))]
+                        if pool:
+                            rows = pool
+                        hd = hint["dim"]
+                        if hd:
+                            rows.sort(key=lambda m: -(m["dna"].get(hd, 0) or 0))
+                        fallback = True
+                    else:
+                        # 结构词 AND 为空（如「宫崎骏 诺兰」）也交给规则推荐试一次
+                        hint2 = recommend.parse_hint(q)
+                        if hint2["dim"] or hint2["genre"] or hint2["region"]:
+                            rows = recommend.recommend(text=q, limit=100000)
+                            fallback = True
+        else:
+            rows = []
+            hint = recommend.parse_hint(q)
+            if hint["dim"] or hint["genre"] or hint["region"]:
+                rows = recommend.recommend(text=q, limit=100000)
+                fallback = True
     else:
-        rows = recommend.recommend(text=q, region=region or None, genre=genre or None,
+        fallback = False
+        rows = recommend.recommend(text=q, genre=genre or None,
                                    dim=dim or None, limit=100000)
     rows = [m for m in rows
-            if (not region or m["region"] == region)
+            if (not region or recommend.region_match(m["region"], region, m.get("countries")))
             and (not genre or any(genre == g for g in m["genres"]))
             and (not year_min or (m["year"] or 0) >= year_min)
             and (not year_max or (m["year"] or 0) <= year_max)
@@ -159,7 +194,7 @@ def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: i
     total = len(rows)
     start = (page - 1) * limit
     items = [card(m) for m in rows[start:start + limit]]
-    return {"total": total, "page": page, "limit": limit, "items": items}
+    return {"total": total, "page": page, "limit": limit, "items": items, "fallback": fallback}
 
 @app.get("/api/movies/{movie_id}")
 def api_movie(movie_id: str):
@@ -301,7 +336,7 @@ def _load_movie_context(movie_id: str | None, spoiler: bool = True) -> dict | No
     if m.get("actors"):
         lines.append(f"主演：{' / '.join(m['actors'][:4])}")
     if m.get("genres"):
-        lines.append(f"类型：{' / '.join(m['genres'])} | 地区：{m['region']}")
+        lines.append(f"类型：{' / '.join(m['genres'])} | 地区：{recommend.REGION_LABEL.get(m['region'], m['region'])}")
     if m.get("summary") and not spoiler:
         lines.append(f"简介：{m['summary'][:120]}")
     lines.append(f"DNA：{dims}")
@@ -494,19 +529,20 @@ def _badges(movies):
     regions = [m["region"] for m in movies]
     genres = [g for m in movies for g in (m["genres"] or [])]
     years = [m["year"] or 0 for m in movies]
-    east = sum(1 for r in regions if r in ("华语", "日本", "韩国"))
+    east = sum(1 for r in regions if r in ("中国", "日本", "韩国"))
+    west = sum(1 for r in regions if r in ("欧洲", "美国"))
     got = []
     add = lambda key, name, icon, desc: got.append({"key": key, "name": name, "icon": icon, "desc": desc})
     if movies:
         add("traveler", "初入银河", "🌌", "收藏了第一部电影")
     if east >= 3:
-        add("east", "东方电影探索者", "🏮", "收藏华语 / 日韩电影 ≥ 3 部")
+        add("east", "东方电影探索者", "🏮", "收藏中国 / 日韩电影 ≥ 3 部")
     if regions.count("日本") >= 3:
         add("jp", "日本治愈收藏家", "🌸", "收藏日本电影 ≥ 3 部")
     if regions.count("韩国") >= 2:
         add("kr", "韩国品鉴师", "🎭", "收藏韩国电影 ≥ 2 部")
-    if regions.count("欧美") >= 5:
-        add("west", "欧美经典漫游者", "🏛️", "收藏欧美电影 ≥ 5 部")
+    if west >= 5:
+        add("west", "欧美经典漫游者", "🏛️", "收藏欧洲 / 美国电影 ≥ 5 部")
     if sum(1 for y in years if 0 < y <= 1990) >= 3:
         add("classic", "影史深度党", "🎞️", "收藏 1990 年前经典 ≥ 3 部")
     if sum(1 for g in genres if g in ("科幻", "奇幻", "动作")) >= 3:

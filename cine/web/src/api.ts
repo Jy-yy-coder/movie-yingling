@@ -20,7 +20,7 @@ export const movie = (id: string) => get<Movie>(`/api/movies/${id}`)
 export const movies = (params: Record<string, string | number | undefined>) => {
   const qs = new URLSearchParams()
   Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') qs.set(k, String(v)) })
-  return get<{ total: number; page: number; limit: number; items: Movie[] }>(`/api/movies?${qs}`)
+  return get<{ total: number; page: number; limit: number; items: Movie[]; fallback?: boolean }>(`/api/movies?${qs}`)
 }
 export const suggest = (q: string) =>
   get<{ items: { title: string; type: string; movie_id?: string; year?: string }[] }>(`/api/suggest?q=${encodeURIComponent(q)}`)
