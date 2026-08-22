@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "cd cine/web && npm install && npm run build",
+  "outputDirectory": "cine/web/dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{data/posters,data/posters/**,data/movie_reviews.csv,data/movie_comments.csv,data/movies.csv,data/movies_info_clean.csv,data/movies_by_language.xlsx,data/task,logs,_shots,reports,tests,cine/web,cine/web/**,cine/static,cine/static_legacy,cine/data/lookup.db,cookies,__pycache__,*.pyc,_tmp_*,*.bak*,*.md}"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/", "destination": "/api/index" },
+    { "source": "/api/(.*)", "destination": "/api/index" }
+  ]
+}
