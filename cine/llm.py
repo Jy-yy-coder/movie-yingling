@@ -18,9 +18,16 @@ _lock = threading.Lock()
 _last_call = [0.0]
 
 CONFIG = Path(__file__).resolve().parent.parent / "data" / "task" / "llm_config.json"
-CHAT_MODELS = ["deepseek-v4-flash", "glm-5.2"]
+CHAT_MODELS = ["glm-4-flash"]   # 智谱 BigModel 免费模型（与 llm_config.json 约定一致）
 MIN_INTERVAL = 1.0
-DEFAULT_BASE_URL = "https://token.sensenova.cn/v1"   # 与 llm_config.json 约定一致（见 PLATFORM_DOCUMENTATION）
+DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"   # 智谱开放平台，OpenAI 兼容
+
+# 本地开发支持项目根 .env（python-dotenv 可选）；部署平台（Vercel 等）直接注入环境变量。
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except ImportError:
+    pass
 
 
 _QUOTA_RE = re.compile(r"insufficient_quota|insufficient|quota|balance|credit|欠费|余额|配额|充值|billing", re.I)
@@ -83,7 +90,7 @@ def _models(cfg):
     for x in ([m] if m else []) + CHAT_MODELS:
         if x and x not in cands and x != "sensenova-6.7-flash-lite":
             cands.append(x)
-    return cands or ["deepseek-v4-flash"]
+    return cands or ["glm-4-flash"]
 
 
 def _throttle():

@@ -5,6 +5,7 @@
 # ---------- 敏感信息（API Key / Token / 密码） ----------
 .env
 .env.*
+!.env.example
 data/task/llm_config.json
 data/task/llm_key.local.txt
 data/task/llm_keys_backup.txt
@@ -76,4 +77,5 @@ desktop.ini
 
 # 本地工具产物
 .playwright-mcp/
+.zcode/
 detail-visual.png
