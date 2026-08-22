@@ -6,12 +6,16 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
+import secrets
+import shutil
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +41,12 @@ elif (_STATIC_LEGACY / "index.html").exists():
 else:
     STATIC_DIR = WEB_DIST
 DB_PATH = Path(__file__).resolve().parent / "data" / "cine.db"
+# Vercel serverless 文件系统只读：把随包的种子库复制到 /tmp 再写（实例回收后新数据丢失，演示够用）
+if os.getenv("VERCEL"):
+    _SEED_DB = DB_PATH
+    DB_PATH = Path("/tmp/cine.db")
+    if not DB_PATH.exists() and _SEED_DB.exists():
+        shutil.copyfile(_SEED_DB, DB_PATH)
 
 # ---------------- 启动 ----------------
 @app.on_event("startup")
@@ -127,6 +137,25 @@ def _token(uid, phone):
     raw = hashlib.md5(f"{uid}|{phone}|{time.time()}".encode()).hexdigest()[:24]
     return raw
 
+# ---------------- 限流 ----------------
+_RATE_BUCKETS: dict[str, list[float]] = {}
+_RATE_LOCK = threading.Lock()
+
+def _rate_limit(key: str, max_hits: int, window_s: float):
+    """内存级滑动窗口限流，超限抛 429。单实例部署够用（多实例各自计数，视为软限制）。"""
+    now = time.time()
+    with _RATE_LOCK:
+        hits = [t for t in _RATE_BUCKETS.get(key, []) if now - t < window_s]
+        if len(hits) >= max_hits:
+            raise HTTPException(429, "操作太频繁，请稍后再试")
+        hits.append(now)
+        _RATE_BUCKETS[key] = hits
+        if len(_RATE_BUCKETS) > 10000:   # 防字典无限增长
+            cutoff = now - window_s
+            kept = {k: v for k, v in _RATE_BUCKETS.items() if v[-1] > cutoff}
+            _RATE_BUCKETS.clear()
+            _RATE_BUCKETS.update(kept)
+
 # ---------------- 电影 API ----------------
 @app.get("/api/movies")
 def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: int = 0,
@@ -151,12 +180,14 @@ def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: i
             rows = [m for m in data.all_movies() if all(_hit(m, t) for t in structural)]
             if mood_toks:
                 hint = recommend.parse_hint(" ".join(mood_toks))
-                if hint["dim"] or hint["genre"] or hint["region"]:
+                if hint["dim"] or hint["genre"] or hint["region"] or hint["exclude_genres"] or hint["exclude_regions"]:
                     if rows:
                         pool = [m for m in rows
                                 if (not hint["genre"] or any(hint["genre"] == g for g in m["genres"]))
                                 and (not hint["region"] or recommend.region_match(
-                                    m["region"], hint["region"], m.get("countries")))]
+                                    m["region"], hint["region"], m.get("countries")))
+                                and not (hint["exclude_genres"] and any(
+                                    g in m["genres"] for g in hint["exclude_genres"]))]
                         if pool:
                             rows = pool
                         hd = hint["dim"]
@@ -166,13 +197,13 @@ def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: i
                     else:
                         # 结构词 AND 为空（如「宫崎骏 诺兰」）也交给规则推荐试一次
                         hint2 = recommend.parse_hint(q)
-                        if hint2["dim"] or hint2["genre"] or hint2["region"]:
+                        if hint2["dim"] or hint2["genre"] or hint2["region"] or hint2["exclude_genres"] or hint2["exclude_regions"]:
                             rows = recommend.recommend(text=q, limit=100000)
                             fallback = True
         else:
             rows = []
             hint = recommend.parse_hint(q)
-            if hint["dim"] or hint["genre"] or hint["region"]:
+            if hint["dim"] or hint["genre"] or hint["region"] or hint["exclude_genres"] or hint["exclude_regions"]:
                 rows = recommend.recommend(text=q, limit=100000)
                 fallback = True
     else:
@@ -368,7 +399,8 @@ def _save_conversation_message(conversation_id: int, role: str, content: str,
 
 
 @app.post("/api/chat")
-def api_chat(body: ChatIn):
+def api_chat(body: ChatIn, request: Request):
+    _rate_limit(f"chat:{request.client.host if request.client else 'unknown'}", 10, 60)
     uid = _uid_from_auth(body.token, body.device_id)
 
     # 会话管理：有 conversation_id 则用（校验归属，防越权读写他人会话），否则创建新会话
@@ -702,17 +734,20 @@ class SmsIn(BaseModel):
     phone: str
 
 @app.post("/api/auth/sms")
-def api_sms(body: SmsIn):
+def api_sms(body: SmsIn, request: Request):
     if not re.fullmatch(r"1\d{10}", body.phone):
         raise HTTPException(400, "手机号格式不对")
-    code = "246810"   # 演示期固定验证码
+    _rate_limit(f"sms:{request.client.host if request.client else 'unknown'}", 1, 60)
+    code = f"{secrets.randbelow(1000000):06d}"   # 随机 6 位；未接短信通道，写日志供演示查收
     con = _conn()
     # 显式删旧插新（sms_codes 无 UNIQUE，OR REPLACE 不会替换）
     con.execute("DELETE FROM sms_codes WHERE phone=?", (body.phone,))
     con.execute("INSERT INTO sms_codes(phone,code,expires_at) VALUES(?,?,?)",
                 (body.phone, code, time.time() + 600))
     con.commit(); con.close()
-    return {"message": "验证码已发送(演示期固定 246810)"}
+    logging.getLogger("cine.sms").info("验证码 %s -> %s（10 分钟内有效）", code[:3] + "***", body.phone[:3] + "****" + body.phone[-4:])
+    print(f"[演示验证码] {body.phone} -> {code}")   # 本地演示窗口直接可见；线上日志含全码便于自测
+    return {"message": "验证码已发送，请查看服务端日志（演示期未接短信通道）"}
 
 class RegisterIn(BaseModel):
     phone: str
@@ -951,15 +986,24 @@ def _signal_genres(uid: int) -> dict | None:
 
 # ---------------- 静态资源 ----------------
 BASE = Path(__file__).resolve().parent.parent
+IS_VERCEL = bool(os.getenv("VERCEL"))
+# 海报目录优先 data/ 原件；缺失（克隆后 data/posters 被 gitignore）时回退 web/public 副本。
+# Vercel 部署下海报由前端静态资源（CDN）提供，后端可不挂载。
 _POSTERS_THUMB = BASE / "data" / "enriched" / "posters_thumb"
 _POSTERS = BASE / "data" / "posters"
-# 海报目录可能被 gitignore；缺失时建空目录，避免 import 即崩
-_POSTERS_THUMB.mkdir(parents=True, exist_ok=True)
-_POSTERS.mkdir(parents=True, exist_ok=True)
-if not (STATIC_DIR / "index.html").exists():
-    raise RuntimeError(
-        f"前端静态目录不可用: {STATIC_DIR}（请先 cd cine/web && npm install && npm run build）"
-    )
-app.mount("/posters_thumb", StaticFiles(directory=str(_POSTERS_THUMB)), name="thumbs")
-app.mount("/posters", StaticFiles(directory=str(_POSTERS)), name="posters")
-app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+_WEB_PUBLIC = Path(__file__).resolve().parent / "web" / "public"
+if not _POSTERS_THUMB.exists():
+    _POSTERS_THUMB = _WEB_PUBLIC / "posters_thumb"
+if not _POSTERS.exists():
+    _POSTERS = _WEB_PUBLIC / "posters"
+if not IS_VERCEL:
+    # 本地开发：目录可能缺失，建空目录避免 import 即崩
+    _POSTERS_THUMB.mkdir(parents=True, exist_ok=True)
+    _POSTERS.mkdir(parents=True, exist_ok=True)
+    if not (STATIC_DIR / "index.html").exists():
+        raise RuntimeError(
+            f"前端静态目录不可用: {STATIC_DIR}（请先 cd cine/web && npm install && npm run build）"
+        )
+    app.mount("/posters_thumb", StaticFiles(directory=str(_POSTERS_THUMB)), name="thumbs")
+    app.mount("/posters", StaticFiles(directory=str(_POSTERS)), name="posters")
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")

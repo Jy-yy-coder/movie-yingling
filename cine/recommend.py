@@ -62,43 +62,78 @@ def region_match(m_region, region, countries=None):
     return m_region == region
 
 
+# 否定词：出现在类型/地区关键词前 3 字内视为负向条件（不要爱情/别推恐怖/除了美国…）
+_NEG_PAT = re.compile(r"(不要|不想|不喜|不喜欢|别|讨厌|排斥|排除|除了|不含|拒绝|不看|没心情|不看|不想看)$")
+
+def _negated(text: str, kw: str) -> bool:
+    """kw 在原文中出现时，其前方紧邻否定词则视为负向。"""
+    start = 0
+    while True:
+        i = text.find(kw, start)
+        if i < 0:
+            return False
+        if _NEG_PAT.search(text[max(0, i - 4):i]):
+            return True
+        start = i + 1
+
 def parse_hint(text: str):
-    """从用户描述里抽 感觉维度/类型/地区/年份 提示。返回 dict。"""
-    hint = {"dim": None, "genre": None, "region": None, "year_min": None}
+    """从用户描述里抽 感觉维度/类型/地区/年份 提示。
+    支持否定条件（不要X/别X/除了X）：X 进入 exclude_genres / exclude_regions，
+    且不作为正向条件参与筛选。"""
+    hint = {"dim": None, "genre": None, "region": None, "year_min": None,
+            "exclude_genres": [], "exclude_regions": []}
     for pat, dim, _ in _KEYMAP:
         if pat.search(text):
             hint["dim"] = dim
             break
     for kw, g in _GENRE_ALIAS.items():
         if kw in text:
-            hint["genre"] = g
-            break
+            if _negated(text, kw):
+                if g not in hint["exclude_genres"]:
+                    hint["exclude_genres"].append(g)
+            else:
+                hint["genre"] = hint["genre"] or g
     if not hint["genre"]:
         for kw, g in _MOOD_GENRE.items():
             if kw in text:
-                hint["genre"] = g
-                break
+                if _negated(text, kw):
+                    if g not in hint["exclude_genres"]:
+                        hint["exclude_genres"].append(g)
+                else:
+                    hint["genre"] = hint["genre"] or g
     for kw, rg in _REGION_ALIAS.items():
         if kw in text:
-            hint["region"] = rg
-            break
+            if _negated(text, kw):
+                if rg not in hint["exclude_regions"]:
+                    hint["exclude_regions"].append(rg)
+            else:
+                hint["region"] = hint["region"] or rg
     for num in re.findall(r"(?:19|20)\d{2}", text):
         hint["year_min"] = int(num) if not hint["year_min"] else min(hint["year_min"], int(num))
     return hint
 
 
-def recommend(text: str = "", region=None, genre=None, dim=None, limit=9):
-    """规则推荐：按 DNA 顶维/地区/类型过滤后取 DNA 均值最高。text 优先做意图解析。"""
+def recommend(text: str = "", region=None, genre=None, dim=None, limit=9,
+              exclude_genres=None, exclude_regions=None):
+    """规则推荐：按 DNA 顶维/地区/类型过滤后取 DNA 均值最高。text 优先做意图解析。
+    否定条件（不要X）从候选池中剔除对应类型/地区。"""
     if text:
         h = parse_hint(text)
         region = region or h["region"]
         genre = genre or h["genre"]
         dim = dim or h["dim"]
+        exclude_genres = list(exclude_genres or []) + list(h["exclude_genres"])
+        exclude_regions = list(exclude_regions or []) + list(h["exclude_regions"])
     pool = []
     for m in data.all_movies():
         if region and not region_match(m["region"], region, m.get("countries")):
             continue
         if genre and not any(genre == g for g in m["genres"]):
+            continue
+        if exclude_genres and any(g in m["genres"] for g in exclude_genres):
+            continue
+        if exclude_regions and any(region_match(m["region"], r, m.get("countries"))
+                                   for r in exclude_regions):
             continue
         d = m["dna"]
         if dim and d.get(dim, 0) < 7.5:

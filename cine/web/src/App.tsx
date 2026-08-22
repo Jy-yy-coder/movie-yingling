@@ -6,7 +6,6 @@ import { buildLayout } from './layout'
 import GalaxyScene from './scenes/GalaxyScene'
 import BootScene from './scenes/BootScene'
 import HUD from './components/HUD'
-import Navigator from './components/Navigator'
 import Detail from './pages/Detail'
 import Profile from './pages/Profile'
 import Chat from './pages/Chat'
@@ -122,7 +121,6 @@ export default function App() {
         {route.path === '/explore' && <Explore key="explore" />}
         {route.path === '/personality' && <Personality key="personality" />}
       </AnimatePresence>
-      <Navigator />
       <BootScene />
     </>
   )

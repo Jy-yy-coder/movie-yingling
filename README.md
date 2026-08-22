@@ -179,28 +179,31 @@ npm run build       # TypeScript 编译 + Vite 打包到 dist/
 
 ## Vercel 部署说明
 
-### 当前状态
+本项目支持 **单仓库单 Vercel 项目** 部署（前端静态 + Python Serverless API 同域）：
 
-本项目为 **前后端一体** 架构（FastAPI 后端 + React 前端），**不支持直接部署到 Vercel**。原因：
+- 前端（`cine/web`，Vite）构建为静态资源，海报随 `web/public` 一起上 CDN
+- 后端（FastAPI）通过 `api/index.py` 挂为 Serverless Function，仅处理 `/api/*`（见 `vercel.json`）
+- `cine/data/lookup_slim.db`（60MB 瘦身版库外索引）与 `data/enriched/comments_fts.db`（85MB）随仓库分发
+- 用户数据（注册/收藏/聊天记录）写入 `/tmp` 临时 SQLite——**实例回收后会丢失**，适合演示，不适合生产
+- 向量语义检索依赖 torch 模型，无法上 serverless——自动降级为关键词 + 规则推荐
+- LLM key 在 Vercel 项目环境变量中配置 `CINE_LLM_API_KEY`（智谱 BigModel）
 
-1. Vercel 主要支持 Serverless Functions / 静态站点，不适合运行长驻 Python 进程
-2. 后端依赖本地 SQLite 数据库和大量数据文件
-3. 海报等静态资源通过 FastAPI 的 `StaticFiles` 挂载
+### 部署步骤
 
-### 推荐部署方式
+1. 推送仓库到 GitHub
+2. Vercel → New Project → 导入仓库（Root Directory 保持项目根，不要设为 cine/web）
+3. Environment Variables 添加 `CINE_LLM_API_KEY`
+4. Deploy（`vercel.json` 已配置 buildCommand / outputDirectory / 函数路由）
+
+### 本地开发
 
 ```bash
-# 任意支持 Python 的平台（如 Railway / Render / 自有服务器）
 pip install -r requirements.txt
 cd cine/web && npm install && npm run build && cd ../..
-python -m uvicorn cine.main:app --host 0.0.0.0 --port $PORT
+python -m uvicorn cine.main:app --port 8010
 ```
 
-### 如需部署到 Vercel
-
-需要将项目拆分为：
-1. **前端**：纯静态 SPA，部署到 Vercel（需修改 API 地址指向独立后端）
-2. **后端**：部署到 Railway / Render 等支持 Python 的平台
+或直接运行 `start_server.bat`（Windows）。
 
 ## 页面路由
 

@@ -208,6 +208,16 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .hud-filter-title { font-size: 11px; letter-spacing: 4px; color: var(--color-gold-400); font-family: var(--font-mono); }
 .hud-filter-row { display: flex; flex-wrap: wrap; gap: 6px; overflow: hidden; }
 .hud-filter-lab { font-size: 10px; color: var(--color-dust-600); letter-spacing: 2px; width: 100%; margin-top: 2px; }
+/* 平台定位标语（新用户 5 秒看懂这是什么） */
+.hud-brand {
+  position: fixed; top: 16px; left: 18px; z-index: 41;
+  display: flex; flex-direction: column; gap: 4px; padding: 12px 16px;
+  border-radius: var(--r-lg); max-width: 300px;
+}
+.hud-brand b { font-size: 15px; letter-spacing: 2px; color: var(--color-dust-100); }
+.hud-brand span { font-size: 12px; color: var(--color-dust-400); letter-spacing: 1px; }
+.hud-brand a { font-size: 11px; color: var(--color-gold-300); letter-spacing: 1px; margin-top: 2px; }
+.hud-brand a:hover { color: var(--color-gold-200); }
 .chip-mini {
   font-size: 11.5px; padding: 4px 10px; border-radius: 999px;
   display: inline-flex; align-items: center; gap: 5px;
@@ -494,8 +504,20 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 860px) {
-  .hud-filter { display: none; }
+  /* 移动端不再隐藏筛选：改为顶部横滚 chips 条（位于标语下方） */
+  .hud-filter {
+    position: fixed; left: 10px; right: 10px; top: 108px; transform: none;
+    width: auto; padding: 8px 10px; border-radius: 999px;
+    flex-direction: row; align-items: center; gap: 8px;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .hud-filter-title { display: none; }
+  .hud-filter-row { flex-wrap: nowrap; overflow: visible; }
+  .hud-filter-lab { width: auto; margin: 0; white-space: nowrap; }
+  .chip-mini { flex: 0 0 auto; }
   .hud-hint { display: none; }
+  .hud-brand { left: 10px; right: 10px; top: 10px; max-width: none; padding: 10px 14px; }
+  .hud-brand span { font-size: 11px; }
 }
 @media (max-width: 520px) {
   .hud-bottom { gap: 10px; padding: 8px 14px; }

@@ -11,12 +11,16 @@ import sqlite3
 import threading
 from pathlib import Path
 
-import pandas as pd
+try:
+    import pandas as pd  # noqa: F401  # 仅 CSV 构建 lookup 时使用（见 _load_lookup 内延迟导入）
+except ImportError:   # serverless 只带现成 db，pandas 可不装
+    pd = None
 
 BASE = Path(__file__).resolve().parent.parent          # 项目根
 ENRICHED = BASE / "data" / "enriched"
 INFO_CSV = BASE / "data" / "movies_info_clean.csv"
 LOOKUP_DB = Path(__file__).resolve().parent / "data" / "lookup.db"
+LOOKUP_SLIM_DB = Path(__file__).resolve().parent / "data" / "lookup_slim.db"
 FTS_DB = ENRICHED / "comments_fts.db"
 CORE_JSON = ENRICHED / "movies_core.json"
 SIMILAR_JSON = ENRICHED / "similarity.json"
@@ -30,6 +34,7 @@ _ext_rows: list[dict] = []          # 库外精选星球（评分≥6.0、去重
 _ext_by_id: dict[str, dict] = {}
 _sentiment: dict[str, dict] = {}
 _comments_by_movie: dict[str, list[dict]] = {}   # {movie_id: [{cid,text,votes,star,author},...]} 预加载短评索引
+_COMMENTS_LAZY = False                            # CSV 缺失时按需查 FTS 库（serverless 模式）
 _fts_local = threading.local()                    # 每线程一只读 FTS 连接（避免跨线程共用）
 
 EXT_LIMIT = 4410                    # 库外星球数：590 核心 + 4410 库外 = 5000 颗
@@ -69,10 +74,12 @@ def load():
 
 
 def _load_lookup():
-    """库外电影轻索引：lookup.db 已建则直接读，否则从 CSV 一次性构建。"""
+    """库外电影轻索引：lookup.db（完整版）→ lookup_slim.db（简介截断的瘦身版，
+    随仓库分发用于 serverless 部署）→ 都没有则从 CSV 一次性构建。"""
     global _lookup_rows
-    if LOOKUP_DB.exists():
-        con = sqlite3.connect(str(LOOKUP_DB))
+    db = LOOKUP_DB if LOOKUP_DB.exists() else (LOOKUP_SLIM_DB if LOOKUP_SLIM_DB.exists() else None)
+    if db:
+        con = sqlite3.connect(str(db))
         con.row_factory = sqlite3.Row
         rows = con.execute(
             "SELECT title, title_norm, year, genres, countries, rating, rating_count, summary, poster "
@@ -83,6 +90,7 @@ def _load_lookup():
     if not INFO_CSV.exists():
         _lookup_rows = []
         return
+    import pandas as pd   # 延迟导入：serverless 部署只带现成 db，无需 pandas
     LOOKUP_DB.parent.mkdir(parents=True, exist_ok=True)
     df = pd.read_csv(INFO_CSV, dtype=str).fillna("")
     con = sqlite3.connect(str(LOOKUP_DB))
@@ -220,7 +228,7 @@ def lookup_rows() -> list[dict]:
 
 def comments_indexed() -> bool:
     """短评索引是否可用（启动体检用）。"""
-    return bool(_comments_by_movie)
+    return bool(_comments_by_movie) or FTS_DB.exists()
 
 
 # ---------------- 观众情绪 / 电影银河 ----------------
@@ -233,11 +241,14 @@ def sentiment(movie_id: str) -> dict:
 
 def _load_comments_index():
     """预加载短评原文索引 {movie_id: [{cid,text,votes,star,author}, ...]}，
-    top_comments 直接内存取用（避免每次详情请求重读 30MB CSV）。"""
-    global _comments_by_movie
+    top_comments 直接内存取用（避免每次详情请求重读 30MB CSV）。
+    CSV 不存在（serverless 部署只带 comments_fts.db）时进入惰性模式，
+    top_comments 按需查 FTS 库（无 author 字段，置空）。"""
+    global _comments_by_movie, _COMMENTS_LAZY
     csv_path = BASE / "data" / "movie_comments.csv"
     if not csv_path.exists():
         _comments_by_movie = {}
+        _COMMENTS_LAZY = FTS_DB.exists()
         return
     df = pd.read_csv(csv_path, encoding="utf-8-sig", dtype=str).fillna("")
     votes = pd.to_numeric(df["votes"], errors="coerce").fillna(0).astype(int).tolist()
@@ -263,7 +274,22 @@ def _load_comments_index():
 def top_comments(movie_id: str, limit: int = 3) -> dict:
     """获取指定电影的好评/差评各 limit 条（按 votes 降序）。
     返回 {"up": [...], "dn": [...]}，每条含 cid/text/votes/star/author。
-    数据来自启动时预加载的短评索引（不再每次请求重读 CSV）。"""
+    数据来自启动时预加载的短评索引（不再每次请求重读 CSV）；
+    惰性模式（serverless）下按需查 FTS 库。"""
+    if _COMMENTS_LAZY and not _comments_by_movie:
+        con = fts()
+        if con is None:
+            return {"up": [], "dn": []}
+
+        def _q(cond: str):
+            rows = con.execute(
+                f"SELECT body, cid, star, votes FROM docs WHERE movie_id=? AND {cond} "
+                f"ORDER BY CAST(votes AS INTEGER) DESC LIMIT ?",
+                (movie_id, limit)).fetchall()
+            return [{"cid": str(r["cid"]), "text": (r["body"] or "")[:200],
+                     "votes": int(r["votes"] or 0), "star": int(r["star"] or 0), "author": ""}
+                    for r in rows]
+        return {"up": _q("CAST(star AS INTEGER)>=4"), "dn": _q("CAST(star AS INTEGER)<=2")}
     comments = _comments_by_movie.get(movie_id)
     if not comments:
         return {"up": [], "dn": []}

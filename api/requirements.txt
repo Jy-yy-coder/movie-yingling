@@ -1,0 +1,6 @@
+# Vercel serverless 运行时依赖（精简：无 pandas/uvicorn/sentence-transformers）
+# - pandas 仅本地从 CSV 构建 lookup.db 时需要
+# - sentence-transformers/torch 无法上 serverless，向量检索自动降级为关键词模式
+fastapi>=0.110.0
+openai>=1.0.0
+numpy>=1.24.0

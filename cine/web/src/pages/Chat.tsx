@@ -13,6 +13,16 @@ interface Msg {
   reply?: ChatReply
 }
 
+/* 刷新/返回后恢复聊天（仅普通会话；陪看场景与具体电影绑定，不恢复） */
+const CHAT_STORE = 'cine_chat_session_v1'
+type Stored = { mode: 'rec' | 'talk'; msgs: Msg[]; conversationId?: number; resolvedMovieId?: string }
+const loadStored = (): Stored | null => {
+  try {
+    const raw = sessionStorage.getItem(CHAT_STORE)
+    return raw ? (JSON.parse(raw) as Stored) : null
+  } catch { return null }
+}
+
 const QUICK = [
   '推荐一部催泪的日本电影',
   '想轻松两小时，来点搞笑的',
@@ -22,22 +32,34 @@ const QUICK = [
 
 /* 聊天主体面板：embed 时嵌入探索模式，否则由 Chat 包成右侧滑入整屏页 */
 export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; initialMovieId?: string }) {
-  /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画 */
-  const [mode, setMode] = useState<'rec' | 'talk'>(initialMovieId ? 'talk' : 'rec')
+  /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画；普通会话尝试恢复上次聊天 */
+  const stored = initialMovieId ? null : loadStored()
+  const [mode, setMode] = useState<'rec' | 'talk'>(stored?.mode ?? (initialMovieId ? 'talk' : 'rec'))
   /* 无剧透默认开关（个人中心设置，默认开启） */
   const [spoiler, setSpoiler] = useState(() => localStorage.getItem('cine_spoiler_default') !== '0')
-  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [msgs, setMsgs] = useState<Msg[]>(stored?.msgs ?? [])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [conversationId, setConversationId] = useState<number | undefined>(undefined)
+  const [conversationId, setConversationId] = useState<number | undefined>(stored?.conversationId)
   const [movieId] = useState<string | undefined>(initialMovieId)
   /* 手动陪看中聊中的电影：后续消息（含 chip）继续携带，保持上下文 */
-  const [resolvedMovieId, setResolvedMovieId] = useState<string | undefined>(undefined)
+  const [resolvedMovieId, setResolvedMovieId] = useState<string | undefined>(stored?.resolvedMovieId)
   const [intro, setIntro] = useState(Boolean(initialMovieId))
   /* 手动陪看讨论是否已播过开场（每个会话只播一次） */
   const playedWatch = useRef(Boolean(initialMovieId))
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  /* 消息/会话变化时写入 sessionStorage（陪看场景不持久化），刷新或返回后可续聊 */
+  useEffect(() => {
+    if (initialMovieId) return
+    if (!msgs.length && !conversationId) {
+      sessionStorage.removeItem(CHAT_STORE)
+      return
+    }
+    sessionStorage.setItem(CHAT_STORE, JSON.stringify({ mode, msgs, conversationId, resolvedMovieId }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msgs, conversationId, resolvedMovieId])
 
   const push = (m: Msg) => setMsgs((prev) => [...prev, m])
   const clear = () => {

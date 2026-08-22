@@ -185,6 +185,54 @@ def _history_seen_ids(history: list[dict] | None) -> set[str]:
     return seen
 
 
+def _history_rec_anchor(history: list[dict] | None) -> str:
+    """上轮推荐的带序号锚点，让「第二部/上一部」这类指代有确定所指。"""
+    for h in reversed(history or []):
+        raw = h.get("movie_ids")
+        if not raw:
+            continue
+        try:
+            ids = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        parts = []
+        for i, mid in enumerate(ids[:5], 1):
+            m = data.movie(mid)
+            if m:
+                parts.append(f"第{i}部《{m['title']}》")
+        if parts:
+            return "、".join(parts)
+        break
+    return ""
+
+
+_ORDINAL_CN = {"一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "1": 0, "2": 1, "3": 2, "4": 3, "5": 4}
+
+def _ordinal_ref(msg: str, history: list[dict] | None) -> str | None:
+    """解析「第N部/刚才那部/上一部」指代的 movie_id（来自上轮推荐记录）。"""
+    for h in reversed(history or []):
+        raw = h.get("movie_ids")
+        if not raw:
+            continue
+        try:
+            ids = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        if not ids:
+            continue
+        m = re.search(r"第([一二三四五1-5])部", msg)
+        if m:
+            i = _ORDINAL_CN.get(m.group(1))
+            if i is not None and i < len(ids):
+                return ids[i]
+        if re.search(r"(上一部|上一部片|刚才那部|最后那部|它类似|类似它)", msg):
+            return ids[-1]
+        if re.search(r"(第一部|刚才第一部|首个)", msg):
+            return ids[0]
+        break
+    return None
+
+
 def _movie_card(m, safe: bool = False):
     """事实卡。safe=True（无剧透模式）时不下发剧情简介——prompt 层与输出层同时断掉剧透源。"""
     d = m["dna"]
@@ -291,9 +339,11 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
                         "「《千与千寻》想表达什么」。",
                 "offline": True, "citations": [], "kind": "talk_prompt"}
 
-    # —— 意图 3：推荐（关键词命中 维度/类型/地区，或命中推荐/心情类触发词）——
+    # —— 意图 3：推荐（关键词命中 维度/类型/地区/否定条件，或命中推荐/心情类触发词）——
     hint = recommend.parse_hint(msg)
-    if hint["dim"] or hint["genre"] or hint["region"] or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|心情|无聊|片荒|烦", msg):
+    if (hint["dim"] or hint["genre"] or hint["region"]
+            or hint["exclude_genres"] or hint["exclude_regions"]
+            or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|心情|无聊|片荒|烦", msg)):
         return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
 
     # —— 意图 4：追问/跟进（无电影上下文时）——
@@ -473,15 +523,34 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
         # 全排掉时清空，交给向量检索找新片（而不是原样返回旧片）
         ms = fresh
 
+    # 序数/指示指代命中上轮某部（「第二部不错，来类似的」）→ 以相似片为主候选
+    ref_id = _ordinal_ref(msg, history)
+    if ref_id:
+        sim_ms = [data.movie(sid) for sid in data.similar(ref_id)]
+        sim_ms = [m for m in sim_ms if m and m["movie_id"] not in seen_hist
+                  # 否定条件同样过滤相似片候选
+                  and not any(g in m["genres"] for g in (hint.get("exclude_genres") or []))]
+        if sim_ms:
+            ms = sim_ms[:4] + [m for m in ms if m["movie_id"] not in {x["movie_id"] for x in sim_ms}]
+            ms = ms[:4]
+
     # 第二优先：关键词没命中或结果不足（<2 部）→ 向量语义检索补位
     if len(ms) < 2:
         query = _rewrite_query(msg, history)      # 多轮查询改写
         hits = embed.retrieve(query, top_k=12)
         seen = {m["movie_id"] for m in ms}
+
+        def _excluded(m) -> bool:
+            """否定条件同样作用于向量补位结果（不要爱情片 → 补位也不能混入爱情片）。"""
+            eg = hint.get("exclude_genres") or []
+            er = hint.get("exclude_regions") or []
+            return (any(g in m["genres"] for g in eg)
+                    or any(recommend.region_match(m["region"], r, m.get("countries")) for r in er))
+
         for mid, _score in hits:
             if mid not in seen and mid not in seen_hist:
                 m = data.movie(mid)
-                if m:
+                if m and not _excluded(m):
                     ms.append(m)
                     seen.add(mid)
         # 全被历史排掉时放宽：宁可重复也要保证有结果
@@ -489,7 +558,7 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
             for mid, _score in hits:
                 if mid not in seen:
                     m = data.movie(mid)
-                    if m:
+                    if m and not _excluded(m):
                         ms.append(m)
                         seen.add(mid)
                 if len(ms) >= 2:
@@ -531,6 +600,19 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
         taste = "、".join(like_genres.keys())
         rec_prompt = (f"用户问：{msg}\n\n"
                       f"【你的观影偏好（来自你最近收藏/点开的电影）】{taste}\n\n推荐清单:\n{facts}")
+    # 否定条件显式告知 LLM（候选已过滤，这里约束文案层不要提及被排除类型的新片）
+    eg = hint.get("exclude_genres") or []
+    er = hint.get("exclude_regions") or []
+    if eg or er:
+        neg = "、".join(eg + er)
+        rec_prompt += (f"\n\n【用户明确排除】{neg}。清单已剔除这些类型/地区，"
+                       f"回复中也不要再提及相关影片。")
+    # 上轮推荐序数锚点：让「第二部/上一部不错」这类指代有确定所指
+    anchor = _history_rec_anchor(history)
+    if anchor:
+        rec_prompt += (f"\n\n【上一轮推荐（按当时顺序）】{anchor}。"
+                       f"用户提到「第几部/上一部/刚才那部」时以此为准；"
+                       f"本轮推荐清单的编号是新的，注意区分。")
     rec_system = SYSTEM_PROMPT_REC_SAFE if spoiler else SYSTEM_PROMPT_REC
     offline, polished, model = _polish(
         rec_system, rec_prompt, cits, offline_txt=plain,

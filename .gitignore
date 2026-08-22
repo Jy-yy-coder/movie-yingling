@@ -34,10 +34,15 @@ lerna-debug.log*
 # 原始数据（过大，不适合 GitHub）
 data/*.csv
 data/*.xlsx
-# 海报完整入库（比赛展示需要）：data/posters/ 与 data/enriched/posters_thumb/ 不再排除
-# 运行时 / 构建产物数据库
+# 海报：唯一入库副本在 cine/web/public/（前端构建随静态资源上 CDN）。
+# data/ 下同名原件仅本地后端使用，不再重复入库（避免仓库双份 240MB）。
+data/posters/
+data/enriched/posters_thumb/
+# 运行时 / 构建产物数据库（comments_fts.db 除外：serverless 部署必需，85MB < GitHub 100MB 限制）
 data/enriched/*.db
+!data/enriched/comments_fts.db
 data/enriched/*.npz
+!data/enriched/movie_vectors.npz
 # 备份文件
 *.bak*
 *.bak_p1
@@ -53,7 +58,11 @@ data/enriched/_clean_stats.txt
 data/enriched/sample_cards*.md
 
 # ---------- 运行时数据库 ----------
+# lookup_slim.db（60MB 瘦身版库外索引）与 cine.db（用户库种子）需要随仓库分发供 serverless 部署；
+# lookup.db（134MB 完整版）仍仅本地使用。
 cine/data/*.db
+!cine/data/lookup_slim.db
+!cine/data/cine.db
 cine/data/*.log
 
 # ---------- 临时文件 ----------

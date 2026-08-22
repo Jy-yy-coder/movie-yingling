@@ -12,7 +12,6 @@ interface GalaxyStore {
   interacting: boolean
   focusRegion: string
   focusGenre: string
-  navigatorOpen: boolean
   setPlanets: (ps: Planet[]) => void
   setBooted: (b: boolean) => void
   setHover: (id: string | null) => void
@@ -20,7 +19,6 @@ interface GalaxyStore {
   setSelected: (id: string | null) => void
   setInteracting: (b: boolean) => void
   setFocus: (region: string, genre: string) => void
-  setNavigatorOpen: (b: boolean) => void
 }
 
 export const useGalaxy = create<GalaxyStore>((set) => ({
@@ -34,7 +32,6 @@ export const useGalaxy = create<GalaxyStore>((set) => ({
   interacting: false,
   focusRegion: '',
   focusGenre: '',
-  navigatorOpen: false,
   setPlanets: (ps) => set({ planets: ps, planetsById: Object.fromEntries(ps.map((p) => [p.id, p])), loaded: true }),
   setBooted: (b) => set({ booted: b }),
   setHover: (id) => set({ hoverId: id }),
@@ -42,5 +39,4 @@ export const useGalaxy = create<GalaxyStore>((set) => ({
   setSelected: (id) => set({ selectedId: id }),
   setInteracting: (b) => set({ interacting: b }),
   setFocus: (region, genre) => set({ focusRegion: region, focusGenre: genre }),
-  setNavigatorOpen: (b) => set({ navigatorOpen: b }),
 }))
