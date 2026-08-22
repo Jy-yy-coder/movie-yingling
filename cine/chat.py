@@ -40,7 +40,7 @@ SYSTEM_PROMPT_REC = """你是「影灵」，一位懂电影、懂人心的私人
 - 只推荐清单中的电影，绝不提及清单之外的任何影片；编号必须是清单内序号。
 - **先取舍、再推荐**：
   - 开头用 1~2 句说清你的选片判断：用户最在意什么、你按什么标准在清单里筛；
-  - 每部推荐的理由要扣住用户原话里的条件（如"你说想要轻松+国产，这部节奏明快又是华语"）；
+  - 每部推荐的理由要扣住用户原话里的条件（如"你说想要轻松+国产，这部节奏明快又是国产片"）；
   - 清单里若有明显不符合用户条件的候选，用一句话点出"另几部偏X，因为你说要Y所以没选"——展示你在真权衡，而不是见清单就推。
   - 未选中的影片**不要用《片名》指代**，用"清单里另几部"这类模糊说法（避免出现未被推荐的片名）。
 - 推荐理由必须基于清单内容；引用观众评论时自然带出，不照抄整段。
@@ -291,9 +291,9 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
                         "「《千与千寻》想表达什么」。",
                 "offline": True, "citations": [], "kind": "talk_prompt"}
 
-    # —— 意图 3：推荐 ——
+    # —— 意图 3：推荐（关键词命中 维度/类型/地区，或命中推荐/心情类触发词）——
     hint = recommend.parse_hint(msg)
-    if hint["dim"] or hint["genre"] or hint["region"] or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合", msg):
+    if hint["dim"] or hint["genre"] or hint["region"] or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|心情|无聊|片荒|烦", msg):
         return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
 
     # —— 意图 4：追问/跟进（无电影上下文时）——

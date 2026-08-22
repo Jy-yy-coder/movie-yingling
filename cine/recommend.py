@@ -9,19 +9,57 @@ DNA_DIMS = ["剧情", "演技", "情感", "视听", "节奏"]
 
 # 感觉/场景关键词 -> 规则口径（P1 无 tags，用 DNA + 类型近似）
 _KEYMAP = [
-    (re.compile(r"催泪|感人|泪|哭|治愈|温暖|温情|感动"), "情感", "high"),
-    (re.compile(r"燃|爽|刺激|过瘾|热血|爽片|爽快|搞笑|喜剧|幽默|笑"), "节奏", "high"),
-    (re.compile(r"悬疑|烧脑|反转|推理|剧情|故事|深刻|烧脑"), "剧情", "high"),
-    (re.compile(r"画面|视觉|特效|摄影|配乐|美学|精美|美"), "视听", "high"),
+    (re.compile(r"催泪|感人|泪|哭|治愈|温暖|温情|感动|暖心|亲情|母爱|父爱|家人|离别|怀念"), "情感", "high"),
+    (re.compile(r"失恋|分手|孤独|难过|低落|郁闷|烦|emo|想哭|治愈系|心情不好|不开心"), "情感", "high"),
+    (re.compile(r"燃|爽|刺激|过瘾|热血|爽快|搞笑|喜剧|幽默|笑|开心|快乐|高兴|欢乐|轻松|解压|下饭|沙雕|逗"), "节奏", "high"),
+    (re.compile(r"悬疑|烧脑|反转|推理|剧情|故事|深刻|震撼|人性|现实"), "剧情", "high"),
+    (re.compile(r"励志|梦想|奋斗|逆袭|成长|勇气|希望|振奋"), "剧情", "high"),
+    (re.compile(r"画面|视觉|特效|摄影|配乐|美学|精美|美|大片|史诗"), "视听", "high"),
     (re.compile(r"演技|演员|飙戏|表演|实力派|老戏骨"), "演技", "high"),
 ]
+# 心情/场景关键词 -> 类型兑底（没命中类型名时也能按感觉筛片）
+_MOOD_GENRE = {
+    "开心": "喜剧", "快乐": "喜剧", "高兴": "喜剧", "欢乐": "喜剧", "搞笑": "喜剧",
+    "爆笑": "喜剧", "解压": "喜剧", "轻松": "喜剧", "下饭": "喜剧", "沙雕": "喜剧",
+    "治愈": "家庭", "温暖": "家庭", "亲情": "家庭", "家人": "家庭", "暖心": "家庭",
+    "失恋": "爱情", "恋爱": "爱情", "甜蜜": "爱情", "浪漫": "爱情", "心动": "爱情",
+    "恐怖": "恐怖", "吓人": "恐怖", "惊悚": "惊悚", "刺激": "动作",
+}
 _GENRE_ALIAS = {
     "动画": "动画", "动漫": "动画", "科幻": "科幻", "恐怖": "恐怖", "惊悚": "惊悚",
     "喜剧": "喜剧", "爱情": "爱情", "动作": "动作", "犯罪": "犯罪", "悬疑": "悬疑",
     "剧情": "剧情", "战争": "战争", "纪录片": "纪录片", "音乐": "音乐",
 }
-_REGION_ALIAS = {"华语": "华语", "国产": "华语", "中国": "华语", "日本": "日本", "日": "日本",
-                 "韩": "韩国", "欧美": "欧美", "美国": "欧美", "英": "欧美"}
+_REGION_ALIAS = {"华语": "中国", "国产": "中国", "中国": "中国", "日本": "日本", "日": "日本",
+                 "韩国": "韩国", "韩": "韩国", "美国": "美国", "欧美": "欧美", "西方": "欧美",
+                 "欧洲": "欧洲", "法国": "欧洲", "英国": "欧洲", "德国": "欧洲", "意大利": "欧洲",
+                 "日韩": "日韩",
+                 # 常见非西方国家：按影片 countries 字段匹配（见 region_match）
+                 "印度": "印度", "泰国": "泰国", "伊朗": "伊朗", "苏联": "苏联",
+                 "俄罗斯": "俄罗斯", "巴西": "巴西"}
+# 地区分组别名 → 底层数据地区名（底层六值：中国/日本/韩国/欧洲/美国/其他）
+REGION_GROUPS = {"欧美": ("欧洲", "美国"), "日韩": ("日本", "韩国")}
+# 地区显示名：旧值兼容映射（现数据已直接存六值，identity 为主）
+REGION_LABEL = {"华语": "中国", "欧美": "欧美", "中国": "中国", "日本": "日本", "韩国": "韩国",
+                "欧洲": "欧洲", "美国": "美国", "其他": "其他"}
+# 具体国家词：region 命中这些词时按影片 countries 字段匹配，比笼统归「其他」更准
+_COUNTRY_KEYWORDS = {"印度", "泰国", "伊朗", "苏联", "俄罗斯", "巴西"}
+
+
+def region_match(m_region, region, countries=None):
+    """地区筛选：支持六值地区名（中国/日本/韩国/欧洲/美国/其他）、
+    复合词（欧美=欧洲+美国 / 日韩=日本+韩国）
+    与具体国家名（印度/泰国/伊朗/苏联/俄罗斯/巴西，按影片 countries 字段匹配）。"""
+    if not region:
+        return True
+    if region == "其他":
+        return m_region == "其他"
+    group = REGION_GROUPS.get(region)
+    if group:
+        return m_region in group
+    if region in _COUNTRY_KEYWORDS:
+        return bool(countries) and any(region in str(c) for c in countries)
+    return m_region == region
 
 
 def parse_hint(text: str):
@@ -35,6 +73,11 @@ def parse_hint(text: str):
         if kw in text:
             hint["genre"] = g
             break
+    if not hint["genre"]:
+        for kw, g in _MOOD_GENRE.items():
+            if kw in text:
+                hint["genre"] = g
+                break
     for kw, rg in _REGION_ALIAS.items():
         if kw in text:
             hint["region"] = rg
@@ -53,7 +96,7 @@ def recommend(text: str = "", region=None, genre=None, dim=None, limit=9):
         dim = dim or h["dim"]
     pool = []
     for m in data.all_movies():
-        if region and m["region"] != region:
+        if region and not region_match(m["region"], region, m.get("countries")):
             continue
         if genre and not any(genre == g for g in m["genres"]):
             continue
@@ -184,7 +227,7 @@ def build_route(profile: dict):
         if si == 0:
             why = f"你的「{top}」偏好最强烈，这部 {top} {d.get(top)} 分、豆瓣 {m['rating']}，最对味。"
         elif si == 1:
-            why = f"同样是 {top} 高分（{d.get(top)} 分），换到{m['region']}的{'/'.join(m['genres'][:2])}，风味不同。"
+            why = f"同样是 {top} 高分（{d.get(top)} 分），换到{REGION_LABEL.get(m['region'], m['region'])}的{'/'.join(m['genres'][:2])}，风味不同。"
         elif si == 2:
             why = f"你的「{second}」也不弱，这部 {second} {d.get(second)} 分，是一次温和的跨界。"
         else:
