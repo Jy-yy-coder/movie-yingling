@@ -22,8 +22,6 @@ function rng(seed: number) {
   }
 }
 
-const REGION_ORDER = ['华语', '日本', '韩国', '欧美']
-
 export interface PlanetPos {
   x: number
   y: number
@@ -38,12 +36,14 @@ const GAP = 0.55          // 任意两颗星球之间的最小表面间隙
 const ITER = 60           // 松弛迭代轮数上限
 const CELL = 2.0          // 空间网格边长（≥ 最大中心距 0.52*2+0.55≈1.6，只查相邻格）
 
-/* 地区 → 地图采样组（欧美片按 id 哈希分流到美洲/欧洲两块大陆） */
-function groupOf(p: Planet): '美洲' | '欧洲' | '华语' | '日本' | '韩国' {
-  if (p.region === '欧美') return hash(p.id) % 2 === 0 ? '美洲' : '欧洲'
-  if (p.region === '华语') return '华语'
+/* 地区 → 地图采样组：六值各自钉在对应大陆（美国→美国本土，欧洲→欧洲，
+   其他=非西方非中日韩，钉在南亚/南美/非洲/中东等地区） */
+function groupOf(p: Planet): '中国' | '日本' | '韩国' | '欧洲' | '美国' | '其他' {
+  if (p.region === '中国') return '中国'
   if (p.region === '日本') return '日本'
   if (p.region === '韩国') return '韩国'
+  if (p.region === '美国') return '美国'
+  if (p.region === '其他') return '其他'
   return '欧洲'
 }
 
@@ -166,19 +166,39 @@ export function planetPos(p: Planet): PlanetPos {
   return _final[p.id] || { x: 0, y: 0, z: 0 }
 }
 
-/* 聚焦点：无筛选=球心；选地区/类型=对应星球群的质心 */
+/* 聚焦点：无筛选=球心；选地区/类型=对应星球群的质心。
+   六值地区（中国/日本/韩国/欧洲/美国/其他）直接命中；复合词（欧美/日韩）
+   取各成员地区质心的均值；「地区|类型」二级质心优先，缺失时回落地区质心。 */
+const GROUP_MEMBERS: Record<string, string[]> = {
+  欧美: ['欧洲', '美国'],
+  日韩: ['日本', '韩国'],
+}
 export function focusPoint(region: string, genre: string): PlanetPos {
   if (!region) return { x: 0, y: 0, z: 0 }
-  if (genre && _focus[region + '|' + genre]) return _focus[region + '|' + genre]
-  return _focus[region] || { x: 0, y: 0, z: 0 }
+  const members = GROUP_MEMBERS[region] || [region]
+  const pts: PlanetPos[] = []
+  for (const k of members) {
+    const p = (genre && _focus[k + '|' + genre]) || _focus[k]
+    if (p) pts.push(p)
+  }
+  if (!pts.length) return { x: 0, y: 0, z: 0 }
+  const n = pts.length
+  return {
+    x: pts.reduce((s, p) => s + p.x, 0) / n,
+    y: pts.reduce((s, p) => s + p.y, 0) / n,
+    z: pts.reduce((s, p) => s + p.z, 0) / n,
+  }
 }
 
-export const REGIONS = REGION_ORDER
+/* UI 星域分组口径（HUD 面板，与数据六值一致） */
+export const REGIONS = ['中国', '日本', '韩国', '欧洲', '美国', '其他']
 
-/* 四个地区四种颜色（发光粒子用，HUD 地区按钮同步标识） */
+/* 六个地区六种颜色（星球发光粒子用，HUD 按钮/悬浮提示同步标识） */
 export const REGION_COLORS: Record<string, string> = {
-  华语: '#ff5f5f',
+  中国: '#ff5f5f',
   日本: '#ff9ed2',
   韩国: '#6ee7b7',
-  欧美: '#ffd76a',
+  欧洲: '#ffd76a',
+  美国: '#6ea8ff',
+  其他: '#c9cede',
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGalaxy } from '../store'
 import { REGIONS, REGION_COLORS } from '../layout'
+import { regionLabel } from '../regions'
 
 const GENRES = ['剧情', '喜剧', '动作', '爱情', '科幻', '犯罪', '悬疑', '动画', '奇幻', '家庭', '战争', '恐怖']
 
@@ -85,7 +86,7 @@ export default function HUD() {
             <div className="hud-tip-main">
               <div className="hud-tip-title">{hovered.t}</div>
               <div className="hud-tip-meta t-mono">
-                {[hovered.y, hovered.rating ? hovered.rating.toFixed(1) : null, hovered.region].filter(Boolean).join(' · ')}
+                {[hovered.y, hovered.rating ? hovered.rating.toFixed(1) : null, regionLabel(hovered.region)].filter(Boolean).join(' · ')}
                 {(hovered.k ?? 1) >= 1 ? ' · 点击查看详情' : ''}
               </div>
             </div>

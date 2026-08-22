@@ -46,6 +46,17 @@ def norm_title(s: str) -> str:
 def load():
     global _core, _by_id, _similar, _lookup_rows, _sentiment
     _core = json.loads(CORE_JSON.read_text(encoding="utf-8"))
+    # 地区严谨化（六分组：中国/日本/韩国/欧洲/美国/其他）：
+    # 旧口径把全部西方国家笼统记为「欧美」、非西方国家兜底进「欧美」。
+    # 按 countries 第一制片国重判：欧美拆分为 美国/欧洲/其他；华语统一改称中国。
+    # （华语/日本/韩国的人工口径与 countries 完全一致，直接重命名。）
+    for m in _core:
+        r = m.get("region")
+        if r == "欧美":
+            nr = _region_of(m.get("countries") or [])
+            m["region"] = nr if nr in ("美国", "欧洲", "其他") else "欧洲"
+        elif r == "华语":
+            m["region"] = "中国"
     _by_id = {m["movie_id"]: m for m in _core}
     _similar = json.loads(SIMILAR_JSON.read_text(encoding="utf-8"))
     _load_lookup()
@@ -153,15 +164,34 @@ def ext_movie(ext_id: str) -> dict | None:
         "poster_full": poster, "poster_thumb": poster, "ext": True,
     }
 
+# 欧洲白名单：欧洲各国 + 加拿大/澳新（广义西方英语国家，数量极少，并入欧洲口径）
+_EURO_KWS = (
+    "英国", "爱尔兰", "法国", "德国", "西德", "东德", "意大利", "西班牙", "葡萄牙",
+    "荷兰", "比利时", "卢森堡", "瑞士", "奥地利", "瑞典", "挪威", "丹麦", "芬兰", "冰岛",
+    "波兰", "捷克", "斯洛伐克", "匈牙利", "希腊", "克罗地亚", "南斯拉夫", "塞尔维亚", "斯洛文尼亚",
+    "罗马尼亚", "保加利亚", "阿尔巴尼亚", "乌克兰", "白俄罗斯", "摩尔多瓦", "爱沙尼亚", "拉脱维亚",
+    "立陶宛", "马耳他", "加拿大", "澳大利亚", "新西兰",
+)
+
 def _region_of(countries: list[str]) -> str:
-    c = " ".join(countries)
-    if any(k in c for k in ("中国", "香港", "台湾")):
-        return "华语"
-    if "日本" in c:
+    """地区判定（按第一制片国）：中国(含港澳台) > 日本 > 韩国 > 美国 > 欧洲 > 其他。
+    第一制片国不在已知范围（如苏联/俄罗斯/印度/泰国/巴西）即归「其他」，
+    不向后扫合拍国，避免非西方主导的合拍片被并入欧美；countries 为空同样归「其他」。"""
+    cs = [c for c in (countries or []) if c and str(c).strip()]
+    if not cs:
+        return "其他"
+    first = str(cs[0])
+    if any(k in first for k in ("中国", "香港", "台湾")):
+        return "中国"
+    if "日本" in first:
         return "日本"
-    if "韩国" in c:
+    if "韩国" in first:
         return "韩国"
-    return "欧美"
+    if "美国" in first:
+        return "美国"
+    if any(k in first for k in _EURO_KWS):
+        return "欧洲"
+    return "其他"
 
 def movie(movie_id: str) -> dict | None:
     return _by_id.get(movie_id)

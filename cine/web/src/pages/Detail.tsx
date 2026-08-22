@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { cnTitle, DNA_DIMS, explorer, favorite, feedback, movie, num, unfavorite } from '../api'
+import { regionLabel } from '../regions'
 import type { Movie } from '../types'
 import Radar from '../components/Radar'
 
@@ -70,7 +71,7 @@ export default function Detail({ id }: { id: string }) {
               <div className="detail-meta">
                 {(m.genres || []).map((g) => <span className="tag" key={g}>{g}</span>)}
                 {(m.countries || []).slice(0, 2).map((c) => <span className="tag" key={c}>{c}</span>)}
-                <span className="tag">{m.region}</span>
+                <span className="tag">{regionLabel(m.region)}</span>
                 {m.year ? <span className="tag">{m.year}</span> : null}
                 {m.runtime_min ? <span className="tag">{m.runtime_min} 分钟</span> : null}
               </div>

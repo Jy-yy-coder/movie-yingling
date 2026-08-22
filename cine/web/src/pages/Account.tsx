@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { account, cnTitle, logout } from '../api'
+import { regionLabel } from '../regions'
 import type { AccountData } from '../types'
 
 /* 个人中心：头部（头像 / 昵称 / 档案完成度环）+ 收藏 + 聊天历史 + 设置
@@ -88,7 +89,7 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
                         <em className="t-mono">{m.rating}</em>
                       </span>
                       <span className="account-fav-title">{cnTitle(m.title)}</span>
-                      <span className="account-fav-meta t-mono">{m.year || ''} · {m.region}</span>
+                      <span className="account-fav-meta t-mono">{m.year || ''} · {regionLabel(m.region)}</span>
                     </button>
                   ))}
                 </div>

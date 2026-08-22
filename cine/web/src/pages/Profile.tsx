@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { explorer, cnTitle } from '../api'
+import { regionLabel } from '../regions'
 import type { ExplorerReply } from '../types'
 
 export default function Profile() {
@@ -63,7 +64,7 @@ export default function Profile() {
                         <em className="t-mono">{m.rating}</em>
                       </span>
                       <span className="profile-fav-title">{cnTitle(m.title)}</span>
-                      <span className="profile-fav-meta t-mono">{m.year || ''} · {m.region}</span>
+                      <span className="profile-fav-meta t-mono">{m.year || ''} · {regionLabel(m.region)}</span>
                     </button>
                   ))}
                 </div>
