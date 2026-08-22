@@ -1197,31 +1197,6 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 }
 .set-danger:hover { background: rgba(255, 157, 122, 0.12); }
 
-/* ================= 关于 ================= */
-.about {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: min(720px, calc(100vw - 40px)); max-height: 86vh; overflow: auto;
-  border-radius: var(--r-xl); padding: 30px 34px;
-}
-.about-title { font-size: 25px; letter-spacing: 3px; }
-.about-lead { font-size: 13px; color: var(--color-dust-500); margin-top: 8px; letter-spacing: 1px; }
-.about-section { margin-top: 28px; }
-.about-section-title { font-size: 14px; letter-spacing: 3px; color: var(--color-gold-400); font-family: var(--font-mono); margin-bottom: 14px; }
-.about-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.about-fact { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: var(--r-md); }
-.about-fact-icon { font-size: 22px; }
-.about-fact b { font-size: 14px; color: var(--color-dust-100); font-family: var(--font-display); }
-.about-fact p { font-size: 11.5px; color: var(--color-dust-500); margin-top: 4px; line-height: 1.6; }
-.about-num { font-size: 11px; color: var(--color-gold-400); margin-top: 14px; text-align: center; letter-spacing: 1px; }
-.about-principle {
-  display: flex; gap: 14px; padding: 14px 16px; border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); margin-bottom: 10px;
-}
-.about-principle-icon { font-size: 20px; flex: none; }
-.about-principle b { font-size: 13.5px; color: var(--color-dust-100); }
-.about-principle p { font-size: 12px; color: var(--color-dust-500); margin-top: 5px; line-height: 1.75; }
-.about-foot { text-align: center; font-size: 10px; color: var(--color-dust-600); letter-spacing: 2px; margin-top: 30px; line-height: 1.8; }
-
 /* ================= 列表（从左往右展开，整屏） ================= */
 .list-page { overflow: hidden; }
 .list {
@@ -1654,7 +1629,6 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   .hud-explore-btn span { display: none; }
 }
 @media (max-width: 620px) {
-  .about-facts { grid-template-columns: 1fr; }
   .hud-guide-btn { display: none; }
   .navi-route-radar-wrap { display: none; }
   .bub { max-width: 92%; }

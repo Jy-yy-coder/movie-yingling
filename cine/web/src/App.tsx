@@ -12,7 +12,6 @@ import Chat from './pages/Chat'
 import Login from './pages/Login'
 import Account from './pages/Account'
 import Guest from './pages/Guest'
-import About from './pages/About'
 import List from './pages/List'
 import Explore from './pages/Explore'
 import Personality from './pages/Personality'
@@ -116,7 +115,6 @@ export default function App() {
         {route.path === '/login' && <Login key="login" />}
         {route.path === '/account' && <Account key="account" />}
         {route.path === '/guest' && <Guest key="guest" />}
-        {route.path === '/about' && <About key="about" />}
         {route.path === '/list' && <List key="list" />}
         {route.path === '/explore' && <Explore key="explore" />}
         {route.path === '/personality' && <Personality key="personality" />}
