@@ -163,19 +163,22 @@ npm run build       # TypeScript 编译 + Vite 打包到 dist/
 | `data/enriched/movies_core.json` | ~2.8 MB | 590 部核心电影完整数据 |
 | `data/enriched/similarity.json` | ~60 KB | 相似片关系 |
 | `data/enriched/sentiment.json` | ~0.9 MB | 情绪分析数据 |
-| `data/enriched/posters_thumb/` | ~17 MB | 590 张缩略图海报 |
+| `data/enriched/comments_fts.db` | ~81 MB | 评论全文检索数据库 |
+| `data/enriched/movie_vectors.npz` | ~1.2 MB | 语义向量数据 |
+| `cine/data/lookup_slim.db` | ~60 MB | 库外电影索引（20.8 万部，简介截断版） |
+| `cine/data/cine.db` | 48 KB | 用户库种子（空表结构） |
+| `cine/web/public/posters/` | ~100 MB | 590 张全尺寸海报（前端静态资源） |
+| `cine/web/public/posters_thumb/` | ~17 MB | 590 张缩略图海报 |
 
-### 需要单独获取（大数据文件）
+### 可选（仅本地完整体验，线上部署不需要）
 
 | 文件 | 大小 | 说明 |
 |---|---|---|
-| `data/movies_info_clean.csv` | ~183 MB | 23 万部电影信息（构建库外索引） |
-| `data/movie_comments.csv` | ~29 MB | 11.7 万条真实评论 |
-| `data/enriched/comments_fts.db` | ~81 MB | 评论全文检索数据库 |
-| `data/enriched/movie_vectors.npz` | ~1.2 MB | 语义向量数据 |
-| `data/posters/` | ~100 MB | 590 张全尺寸海报 |
+| `data/movies_info_clean.csv` | ~183 MB | 23 万部电影原始信息（用于构建完整版 lookup.db） |
+| `data/movie_comments.csv` | ~29 MB | 11.7 万条真实评论（本地预加载短评索引，带作者字段） |
+| `cine/data/lookup.db` | ~134 MB | 完整版库外索引（简介不截断，存在时优先于 slim 版） |
 
-> 缺少大数据文件时，平台仍可运行——仅展示 590 部核心电影，库外检索、评论详情等功能降级。
+> 缺少可选文件时，平台仍可完整运行——短评按需查 FTS 库（无作者名），库外检索用瘦身版索引。
 
 ## Vercel 部署说明
 
