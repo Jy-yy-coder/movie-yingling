@@ -90,7 +90,7 @@ export default function Login() {
       transition={{ duration: 0.55, ease: [0.32, 0.72, 0.35, 1] }}
     >
       <div className="login">
-        <a className="page-back page-back-t" href="#/">⌃ 返回银河</a>
+        <a className="nav-close" href="#/explore?tab=me" aria-label="关闭">✕</a>
         <div className="login-head">
           <div className="login-logo">影灵</div>
           <h1 className="login-title title-gold">登录影灵</h1>

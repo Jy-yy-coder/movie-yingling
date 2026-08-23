@@ -281,7 +281,20 @@ def top_comments(movie_id: str, limit: int = 3) -> dict:
         if con is None:
             return {"up": [], "dn": []}
 
+        # 优先读原文表（docs.body 是分词文本，直接展示会变成「词语 词组」样式）
         def _q(cond: str):
+            try:
+                rows = con.execute(
+                    f"SELECT cid, star, votes, author, text FROM raw_comments "
+                    f"WHERE movie_id=? AND {cond} ORDER BY votes DESC LIMIT ?",
+                    (movie_id, limit)).fetchall()
+                if rows:
+                    return [{"cid": str(r["cid"]), "text": (r["text"] or "")[:200],
+                             "votes": int(r["votes"] or 0), "star": int(r["star"] or 0),
+                             "author": r["author"] or ""}
+                            for r in rows]
+            except sqlite3.OperationalError:
+                pass  # 旧库无 raw_comments 表，退回分词文本
             rows = con.execute(
                 f"SELECT body, cid, star, votes FROM docs WHERE movie_id=? AND {cond} "
                 f"ORDER BY CAST(votes AS INTEGER) DESC LIMIT ?",
@@ -289,7 +302,7 @@ def top_comments(movie_id: str, limit: int = 3) -> dict:
             return [{"cid": str(r["cid"]), "text": (r["body"] or "")[:200],
                      "votes": int(r["votes"] or 0), "star": int(r["star"] or 0), "author": ""}
                     for r in rows]
-        return {"up": _q("CAST(star AS INTEGER)>=4"), "dn": _q("CAST(star AS INTEGER)<=2")}
+        return {"up": _q("star>=4"), "dn": _q("star<=2")}
     comments = _comments_by_movie.get(movie_id)
     if not comments:
         return {"up": [], "dn": []}

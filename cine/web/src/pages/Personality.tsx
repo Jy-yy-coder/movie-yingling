@@ -64,7 +64,7 @@ export default function Personality() {
       initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
       transition={{ duration: 0.5, ease: [0.32, 0.72, 0.35, 1] }}
     >
-      <a className="page-back page-back-t" href="#/">⌃ 返回银河</a>
+      <a className="nav-close" href="#/explore?tab=home" aria-label="关闭">✕</a>
       <div className="p-wrap">
         <AnimatePresence mode="wait">
           {/* ---------- 介绍 ---------- */}
@@ -147,9 +147,9 @@ export default function Personality() {
                   onClick={start} disabled={busy}
                 >{busy ? '正在测算…' : '重新测一次'}</motion.button>
                 <motion.a
-                  className="p-btn" href="#/"
+                  className="p-btn" href="#/explore?tab=home"
                   whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                >返回银河</motion.a>
+                >返回首页</motion.a>
               </div>
               {err && <p className="p-err">{err}</p>}
             </motion.div>

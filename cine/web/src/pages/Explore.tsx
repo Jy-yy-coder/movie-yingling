@@ -237,7 +237,7 @@ function Home({ go }: { go: (t: Tab, extra?: Record<string, string>) => void }) 
               onChange={(e) => setKw(e.target.value)}
               onFocus={() => setSugOpen(true)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) search() }}
-              placeholder="搜索电影 / 导演 / 演员 / 类型，如「诺兰」「张国荣」「悬疑」"
+              placeholder="电影/导演/演员"
             />
             <button onClick={() => search()}>搜索</button>
           </div>

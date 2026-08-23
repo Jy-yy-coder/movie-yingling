@@ -164,7 +164,7 @@ export default function Account() {
       initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
       transition={{ duration: 0.55, ease: [0.32, 0.72, 0.35, 1] }}
     >
-      <a className="page-back page-back-b" href="#/">⌄ 返回银河</a>
+      <a className="page-back page-back-b" href="#/explore?tab=home">⌄ 返回首页</a>
       <AccountPanel />
     </motion.div>
   )
