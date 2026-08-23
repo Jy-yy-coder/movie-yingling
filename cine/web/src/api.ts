@@ -80,11 +80,33 @@ const freshGuest = async () => {
   setToken('')
   return ensureGuest()
 }
+/* 已登录凭据（手机号+密码）：serverless 实例更换丢用户库时自动恢复登录态 */
+const CRED_KEY = 'cine_cred'
+const cred = (): { phone: string; password: string } | null => {
+  try { const s = localStorage.getItem(CRED_KEY); return s ? JSON.parse(s) : null } catch { return null }
+}
+export const saveCred = (phone: string, password: string) => {
+  try { localStorage.setItem(CRED_KEY, JSON.stringify({ phone, password })) } catch { /* ignore */ }
+}
+export const clearCred = () => localStorage.removeItem(CRED_KEY)
+const restoreLogin = async (): Promise<string | null> => {
+  const c = cred()
+  if (!c) return null
+  try {
+    const r = await post<{ token: string }>('/api/auth/restore',
+      { phone: c.phone, password: c.password, device_id: deviceId() })
+    setToken(r.token)
+    return r.token
+  } catch { return null }
+}
 const retryOn401 = async <T>(fn: (tok: string) => Promise<T>): Promise<T> => {
   try {
     return await fn(await ensureGuest())
   } catch (e) {
-    if (String((e as Error).message || '').includes('未登录')) return fn(await freshGuest())
+    if (String((e as Error).message || '').includes('未登录')) {
+      const t = await restoreLogin() ?? await freshGuest()
+      return fn(t)
+    }
     throw e
   }
 }
@@ -138,7 +160,7 @@ export const login = (phone: string, password = '', code = '') =>
 export const register = (phone: string, code: string, password: string) =>
   post<{ token: string; user_id: number; merged: boolean }>('/api/auth/register', { phone, code, password, device_id: deviceId() })
 export const sms = (phone: string) => post<{ message: string }>('/api/auth/sms', { phone })
-export const logout = () => setToken('')
+export const logout = () => { setToken(''); clearCred() }
 export const isLoggedIn = () => Boolean(token())
 
 /* ---------- 小工具 ---------- */

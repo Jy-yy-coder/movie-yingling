@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ensureGuest, login, register, sms, setToken } from '../api'
+import { ensureGuest, login, register, saveCred, sms, setToken } from '../api'
 
 /* 登录页：验证码（新用户注册）/ 密码 / 游客 三入口（C4 已拍板） */
 
@@ -45,6 +45,7 @@ export default function Login() {
     try {
       const r = await register(phone, code.trim(), pass)
       setToken(r.token)
+      saveCred(phone, pass)   // 本地存凭据：serverless 实例更换丢库后可自动恢复登录态
       tip(r.merged ? '注册成功，游客记录已合并 ✨' : '注册成功 ✨')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {
@@ -61,6 +62,7 @@ export default function Login() {
     try {
       const r = await login(phone, pass)
       setToken(r.token)
+      saveCred(phone, pass)
       tip(r.merged ? '登录成功，本机游客记录已并入 ✨' : '登录成功 ✨')
       setTimeout(() => { location.hash = '#/account' }, 600)
     } catch (e) {

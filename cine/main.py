@@ -886,6 +886,33 @@ def api_login(body: LoginIn):
     con.commit(); con.close()
     return {"token": tok, "user_id": row[0], "merged": merged}
 
+@app.post("/api/auth/restore")
+def api_restore(body: LoginIn):
+    """凭据恢复登录：serverless 实例更换后 /tmp 用户库会丢注册记录，
+    客户端凭本地保存的手机号+密码自动重登（用户不存在则按原凭据重建），
+    使「已登录」状态跨实例可延续。"""
+    con = _conn()
+    ph = hashlib.sha256(body.password.encode()).hexdigest()
+    row = con.execute("SELECT id,pass_hash FROM users WHERE phone=?", (body.phone,)).fetchone()
+    if row:
+        if row[1] != ph:
+            con.close(); raise HTTPException(400, "手机号或密码不对")
+        uid = row[0]
+        restored = False
+    else:
+        cur = con.execute("INSERT INTO users(phone,pass_hash,device_id,created_at) VALUES(?,?,?,?)",
+                          (body.phone, ph, body.device_id or None, time.strftime("%F %T")))
+        uid = cur.lastrowid
+        restored = True
+    tok = _token(uid, body.phone)
+    if body.device_id:
+        con.execute("UPDATE users SET token=?, device_id=? WHERE id=?", (tok, body.device_id, uid))
+    else:
+        con.execute("UPDATE users SET token=? WHERE id=?", (tok, uid))
+    merged = _merge_guest_data(con, uid, body.device_id) if body.device_id else False
+    con.commit(); con.close()
+    return {"token": tok, "user_id": uid, "merged": merged, "restored": restored}
+
 @app.get("/api/account")
 def api_account(token: str = ""):
     con = _conn()
