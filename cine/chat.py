@@ -38,6 +38,7 @@ SYSTEM_PROMPT_REC = """你是「影灵」，一位懂电影、懂人心的私人
 
 必须遵守：
 - 只推荐清单中的电影，绝不提及清单之外的任何影片；编号必须是清单内序号。
+- 选片先对用户原话，再看评分：催泪/治愈不要推压抑黑暗；轻松搞笑不要推苦情沉重；带父母/全家不要推尺度大或过于无厘头的；文艺/雨天沙发优先节奏缓、情绪细的。清单里高分但气质不符的，明确不选。
 - **先取舍、再推荐**：
   - 开头用 1~2 句说清你的选片判断：用户最在意什么、你按什么标准在清单里筛；
   - 每部推荐的理由要扣住用户原话里的条件（如"你说想要轻松+国产，这部节奏明快又是国产片"）；
@@ -295,7 +296,8 @@ _SIMILAR_HINT = re.compile(r"类似|同款|像这部|同类")
 
 def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: list | None = None,
                 movie_context: dict | None = None, user_profile: dict | None = None,
-                like_genres: dict | None = None):
+                like_genres: dict | None = None, exclude_ids: set | None = None,
+                polish: bool = True):
     """入口：返回 {text, offline, citations:[...], kind, movies?, movie?}。
     mode: "rec"(推荐选片) / "talk"(陪看讨论)；spoiler: 无剧透开关。
     history: 当前会话最近对话历史（由 main.py 加载传入）。
@@ -311,6 +313,8 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
 
     # —— 优先处理：有电影上下文时的追问（推荐/换片类 chip 让位给推荐链路）——
     if movie_context and _is_followup(msg) and not _REC_CHIP_HINT.search(msg):
+        if not polish:
+            return {"text": "", "offline": True, "citations": [], "kind": "skip", "movies": []}
         m = movie_context["data"]
         kind = "core" if "movie_id" in m and not m.get("ext") else "ext"
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
@@ -321,7 +325,10 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
     if m is not None:
         if _SIMILAR_HINT.search(msg):
             hint = recommend.parse_hint(msg)
-            return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
+            return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres,
+                                     exclude_ids, polish)
+        if not polish:
+            return {"text": "", "offline": True, "citations": [], "kind": "skip", "movies": []}
         return _answer_movie(kind, m, msg, mode, spoiler, history, movie_context)
 
     # —— 意图 2：评论/梗检索 ——
@@ -343,8 +350,10 @@ def build_reply(message: str, mode: str = "rec", spoiler: bool = True, history: 
     hint = recommend.parse_hint(msg)
     if (hint["dim"] or hint["genre"] or hint["region"]
             or hint["exclude_genres"] or hint["exclude_regions"]
-            or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|心情|无聊|片荒|烦", msg)):
-        return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres)
+            or hint.get("runtime_max")
+            or re.search(r"推荐|来部|来点|想看|看点|有没有|好看|看看|适合|心情|无聊|片荒|烦|今晚", msg)):
+        return _answer_recommend(msg, hint, spoiler, history, user_profile, like_genres,
+                                 exclude_ids, polish)
 
     # —— 意图 4：追问/跟进（无电影上下文时）——
     if _is_followup(msg) and history:
@@ -411,7 +420,7 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
                 offline, text, model = _polish(system,
                                                f"用户问：{msg}\n\n该片事实:\n{facts}", cits,
                                                offline_txt=offline_txt, history=history, temperature=0.7)
-            return {"text": text, "offline": offline, "citations": cits, "kind": "talk",
+            return {"text": _guard_spoilers(text, spoiler), "offline": offline, "citations": cits, "kind": "talk",
                     "model": model, "movie_id": m["movie_id"], "movie": _rec_card(m),
                     "follow_ups": _follow_ups_for(m, spoiler)}
         # 默认（推荐模式）问答：卡片式陈述；无剧透开启时换安全提示词 + 简介不出
@@ -422,7 +431,7 @@ def _answer_movie(kind, m, msg, mode="rec", spoiler=True, history=None, movie_co
         offline, text, model = _polish(
             system,
             f"用户问：{msg}\n\n该片事实:\n{facts}", cits, offline_txt=facts, history=history)
-        return {"text": text, "offline": offline, "citations": cits, "kind": "movie",
+        return {"text": _guard_spoilers(text, spoiler), "offline": offline, "citations": cits, "kind": "movie",
                 "model": model, "movie_id": m["movie_id"],
                 "follow_ups": _follow_ups_for(m, spoiler)}
     # 库外电影：轻字段
@@ -467,7 +476,7 @@ def watch_opening(movie_id: str, spoiler: bool = True):
     offline, text, model = _polish(
         SYSTEM_PROMPT_OPENING, f"该片事实:\n{_movie_card(m, safe=spoiler)}", [],
         offline_txt=template, temperature=0.7)
-    return {"text": text, "offline": offline, "model": model, "kind": "watch_opening",
+    return {"text": _guard_spoilers(text, spoiler), "offline": offline, "model": model, "kind": "watch_opening",
             "citations": [], "chips": _follow_ups_for(m, spoiler),
             "movie_id": m["movie_id"], "movie": _rec_card(m)}
 
@@ -512,9 +521,10 @@ def _blend_by_profile(ms, profile):
     return [m for _, m in scored]
 
 
-def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, like_genres=None):
-    # 历史已推荐过的片子：「再推荐几部」等追问要排重，避免原样重复
-    seen_hist = _history_seen_ids(history)
+def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, like_genres=None,
+                      exclude_ids=None, polish=True):
+    # 历史已推荐 + 看过了/不对味：下一轮排掉
+    seen_hist = _history_seen_ids(history) | set(exclude_ids or [])
 
     # 第一优先：关键词规则推荐（快、准，适合明确需求）
     ms = recommend.recommend(msg, limit=4)
@@ -585,6 +595,11 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
         lines.append(f"{i}. {_movie_card(m, safe=spoiler)}")
         cards.append(_rec_card(m, hint, i))
         cits += _citations_for(m, 1, spoiler)
+    if not polish:
+        titles = "、".join(f"《{c['title'].split(' ')[0]}》" for c in cards[:3])
+        return {"text": f"先看看这几部：{titles}。理由马上到。",
+                "offline": False, "citations": [], "movies": cards,
+                "kind": "recommend", "model": None, "preview": True, "follow_ups": []}
     facts = "\n".join(lines)
     if spoiler:
         plain = "\n\n".join(
@@ -657,6 +672,22 @@ def _answer_recommend(msg, hint, spoiler=True, history=None, user_profile=None, 
     return {"text": polished, "offline": offline, "citations": cits, "movies": cards,
             "kind": "recommend", "model": model,
             "follow_ups": ["再推荐几部", "有没有轻松一点的？", "有没有更知名的？"]}
+
+
+# 软剧透：无剧透开着时，模型仍可能用自身知识漏出结局/凶手。命中则改口，不把情节交给用户。
+_SOFT_SPOILER = re.compile(
+    r"结局|凶手|反转是|真相是|剧终|挖隧道|逃出了|牺牲了|最后他|最后她|最后他们"
+)
+
+
+def _guard_spoilers(text: str, spoiler: bool, fallback: str | None = None) -> str:
+    if not spoiler or not text:
+        return text
+    if _SOFT_SPOILER.search(text):
+        return fallback or (
+            "无剧透模式下先不聊情节。看完再来找我细聊；现在只说口碑和适不适合看。"
+        )
+    return text
 
 
 def _polish(system, prompt, cits, offline_txt=None, history=None, temperature=0, max_tokens=700):

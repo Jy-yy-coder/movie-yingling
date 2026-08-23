@@ -123,6 +123,7 @@ export interface ChatReply {
   movies?: RecCard[]
   conversation_id?: number
   follow_ups?: string[]            // 陪看引导话题 chip
+  preview?: boolean
 }
 
 /* ---------- AI 陪看开场 ---------- */
