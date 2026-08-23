@@ -9,6 +9,7 @@ from pathlib import Path
 
 from cine import chat as chat_mod
 from cine import data
+from cine import recommend as rec_mod
 
 
 def _offline_llm():
@@ -54,6 +55,26 @@ class TestTitleAndSpoiler(unittest.TestCase):
         facts = chat_mod._movie_card(
             data.movie(r["movies"][0]["movie_id"]), safe=True)
         self.assertNotIn("简介", facts)
+
+    def test_parents_hint_is_family(self):
+        h = rec_mod.parse_hint("有没有适合带父母一起看的")
+        self.assertEqual(h["genre"], "家庭")
+        self.assertEqual(h["dim"], "情感")
+        ms = rec_mod.recommend("有没有适合带父母一起看的", limit=4)
+        self.assertTrue(ms)
+        self.assertTrue(all("家庭" in (m.get("genres") or []) for m in ms))
+
+    def test_wenyi_rainy_not_global_top(self):
+        h = rec_mod.parse_hint("适合下雨天窝沙发看的文艺片")
+        self.assertEqual(h["dim"], "情感")
+        ids = [m["movie_id"] for m in rec_mod.recommend("适合下雨天窝沙发看的文艺片", limit=4)]
+        self.assertNotIn("1293182", ids)  # 十二怒汉不应再因「无意图」霸榜
+
+    def test_tearjerker_jp_anime_ranks_emotion(self):
+        h = rec_mod.parse_hint("推荐一部催泪的日本动画")
+        self.assertEqual((h["genre"], h["region"], h["dim"]), ("动画", "日本", "情感"))
+        titles = [m["title"] for m in rec_mod.recommend("推荐一部催泪的日本动画", limit=4)]
+        self.assertTrue(any("千与千寻" in t or "龙猫" in t for t in titles))
 
 
 class TestAuthMerge(unittest.TestCase):

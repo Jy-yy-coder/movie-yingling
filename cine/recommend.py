@@ -9,8 +9,9 @@ DNA_DIMS = ["剧情", "演技", "情感", "视听", "节奏"]
 
 # 感觉/场景关键词 -> 规则口径（P1 无 tags，用 DNA + 类型近似）
 _KEYMAP = [
-    (re.compile(r"催泪|感人|泪|哭|治愈|温暖|温情|感动|暖心|亲情|母爱|父爱|家人|离别|怀念"), "情感", "high"),
+    (re.compile(r"催泪|感人|泪|哭|治愈|温暖|温情|感动|暖心|亲情|母爱|父爱|家人|离别|怀念|父母|爸妈|全家|长辈|过年|亲子"), "情感", "high"),
     (re.compile(r"失恋|分手|孤独|难过|低落|郁闷|烦|emo|想哭|治愈系|心情不好|不开心"), "情感", "high"),
+    (re.compile(r"文艺|诗意|细腻|安静|雨天|下雨|阴天|沙发|窝着|慢热"), "情感", "high"),
     (re.compile(r"燃|爽|刺激|过瘾|热血|爽快|搞笑|喜剧|幽默|笑|开心|快乐|高兴|欢乐|轻松|解压|下饭|沙雕|逗"), "节奏", "high"),
     (re.compile(r"悬疑|烧脑|反转|推理|剧情|故事|深刻|震撼|人性|现实"), "剧情", "high"),
     (re.compile(r"励志|梦想|奋斗|逆袭|成长|勇气|希望|振奋"), "剧情", "high"),
@@ -22,6 +23,8 @@ _MOOD_GENRE = {
     "开心": "喜剧", "快乐": "喜剧", "高兴": "喜剧", "欢乐": "喜剧", "搞笑": "喜剧",
     "爆笑": "喜剧", "解压": "喜剧", "轻松": "喜剧", "下饭": "喜剧", "沙雕": "喜剧",
     "治愈": "家庭", "温暖": "家庭", "亲情": "家庭", "家人": "家庭", "暖心": "家庭",
+    "父母": "家庭", "爸妈": "家庭", "全家": "家庭", "长辈": "家庭", "亲子": "家庭",
+    "过年": "家庭", "孩子": "家庭",
     "失恋": "爱情", "恋爱": "爱情", "甜蜜": "爱情", "浪漫": "爱情", "心动": "爱情",
     "恐怖": "恐怖", "吓人": "恐怖", "惊悚": "惊悚", "刺激": "动作",
 }
@@ -139,9 +142,14 @@ def recommend(text: str = "", region=None, genre=None, dim=None, limit=9,
         if dim and d.get(dim, 0) < 7.5:
             continue
         mean = sum(d[k] for k in DNA_DIMS) / 5
-        pool.append((mean, m))
-    pool.sort(key=lambda x: (-x[0], -x[1]["rating"]))
-    return [m for _, m in pool[:limit]]
+        dim_score = d.get(dim, 0) if dim else 0
+        pool.append((dim_score, mean, m))
+    # 有心情维度时按该维排序（催泪看情感，而不是五维总分把「技术最好」排前面）
+    if dim:
+        pool.sort(key=lambda x: (-x[0], -x[1], -x[2]["rating"]))
+    else:
+        pool.sort(key=lambda x: (-x[1], -x[2]["rating"]))
+    return [m for _, _, m in pool[:limit]]
 
 
 def profile_rank(profile: dict):
