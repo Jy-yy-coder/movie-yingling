@@ -42,6 +42,12 @@ function useProjectorSound() {
       }
     } catch { /* 音频不可用则静默 */ }
   }, [])
+  useEffect(() => () => {
+    const ctx = ctxRef.current
+    if (!ctx) return
+    try { void ctx.close() } catch { /* ignore */ }
+    ctxRef.current = null
+  }, [])
   return play
 }
 
@@ -69,6 +75,10 @@ export default function BootScene() {
   const [nudge, setNudge] = useState(false) // 蓄力不足松手提示
   const sound = useProjectorSound()
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const stageRef = useRef(stage)
+  const chargeRef = useRef(charge)
+  stageRef.current = stage
+  chargeRef.current = charge
 
   /* 阶段 0：黑屏 → 光点出现 */
   useEffect(() => {
@@ -98,15 +108,50 @@ export default function BootScene() {
 
   /* 松手 */
   const release = () => {
-    if (stage !== 1) return
+    if (stageRef.current !== 1) return
     setCharging(false)
-    if (charge >= RELEASE_MIN) {
+    if (chargeRef.current >= RELEASE_MIN) {
       setStage(2)
     } else {
       setNudge(true)
       setTimeout(() => setNudge(false), 900)
     }
   }
+
+  const skip = useCallback(() => {
+    sessionStorage.setItem('cine_booted', '1')
+    setBooted(true)
+  }, [setBooted])
+
+  /* 键盘：空格按住蓄力，Enter / Escape 跳过 */
+  useEffect(() => {
+    if (booted) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.preventDefault()
+        skip()
+        return
+      }
+      if (e.key === ' ' && stageRef.current === 1) {
+        e.preventDefault()
+        setCharging(true)
+        setCharge((c) => Math.max(c, 1))
+      }
+    }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        e.preventDefault()
+        release()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+    }
+  }, [booted, skip])
 
   /* 爆发大厅 → 投影成星 → 进入（写 sessionStorage，看过不再重播） */
   useEffect(() => {
@@ -192,7 +237,7 @@ export default function BootScene() {
                     ? <span>{charge >= 96 ? '松手！' : '继续按住 · 点亮电影宇宙'}</span>
                     : <span className="boot-pulse-hint">按住光点 · 点亮电影宇宙</span>}
               </div>
-              <div className="boot-charge-sub">{charging ? `${Math.round(charge)}%` : '长按蓄力，松开投影成星'}</div>
+              <div className="boot-charge-sub">{charging ? `${Math.round(charge)}%` : '长按蓄力，松开投影成星 · Enter 跳过'}</div>
             </motion.div>
           )}
 
@@ -241,7 +286,16 @@ export default function BootScene() {
             ))}
           </motion.div>
 
-          <button className="boot-skip" onClick={() => { sessionStorage.setItem('cine_booted', '1'); setBooted(true) }}>跳过 进入宇宙 ›</button>
+          <button
+            type="button"
+            className="boot-skip"
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              skip()
+            }}
+          >跳过 进入宇宙 ›</button>
         </motion.div>
       )}
     </AnimatePresence>

@@ -159,7 +159,7 @@ def _rate_limit(key: str, max_hits: int, window_s: float):
 # ---------------- 电影 API ----------------
 @app.get("/api/movies")
 def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: int = 0,
-               dim: str = "", dim_min: float = 0, sort: str = "dna", q: str = "",
+               runtime_max: int = 0, dim: str = "", dim_min: float = 0, sort: str = "dna", q: str = "",
                page: int = 1, limit: int = 24):
     if q:
         # 多词搜索：按空白拆词，结构词（标题/类型/导演/演员）AND 匹配；
@@ -215,6 +215,7 @@ def api_movies(region: str = "", genre: str = "", year_min: int = 0, year_max: i
             and (not genre or any(genre == g for g in m["genres"]))
             and (not year_min or (m["year"] or 0) >= year_min)
             and (not year_max or (m["year"] or 0) <= year_max)
+            and (not runtime_max or not (m.get("runtime_min") or 0) or (m.get("runtime_min") or 0) <= runtime_max)
             and (not dim_min or (m["dna"].get(dim, 0) if dim else 0) >= dim_min)]
     if sort == "rating":
         rows.sort(key=lambda m: -m["rating"])
@@ -400,7 +401,7 @@ def _save_conversation_message(conversation_id: int, role: str, content: str,
 
 @app.post("/api/chat")
 def api_chat(body: ChatIn, request: Request):
-    _rate_limit(f"chat:{request.client.host if request.client else 'unknown'}", 10, 60)
+    _rate_limit(f"chat:{request.client.host if request.client else 'unknown'}", 20, 60)
     uid = _uid_from_auth(body.token, body.device_id)
 
     # 会话管理：有 conversation_id 则用（校验归属，防越权读写他人会话），否则创建新会话
@@ -435,6 +436,7 @@ def api_chat(body: ChatIn, request: Request):
     # B4：行为反馈隐式画像并入（收藏/浏览/点卡/换片信号逐步拉动画像）
     impl = _implicit_profile(uid)
     like_genres = None
+    exclude_ids = _signal_exclude_ids(uid)
     if impl:
         user_profile = _merge_profiles(user_profile, impl)
         like_genres = _signal_genres(uid)     # 类型亲和（供推荐微调，让效果可见）
@@ -443,7 +445,7 @@ def api_chat(body: ChatIn, request: Request):
     reply = chat_mod.build_reply(
         body.message, mode=body.mode, spoiler=body.spoiler,
         history=history, movie_context=movie_ctx, user_profile=user_profile,
-        like_genres=like_genres)
+        like_genres=like_genres, exclude_ids=exclude_ids)
 
     # 推荐解释：推荐卡始终附结构化解释（有画像用画像版，无画像退化为影片自身数据版）
     kws = json.loads(prow[1]) if (prow and prow[1]) else []
@@ -482,6 +484,43 @@ def api_chat(body: ChatIn, request: Request):
     # 返回结果，附带 conversation_id
     reply["conversation_id"] = conv_id
     return reply
+
+
+@app.post("/api/chat/preview")
+def api_chat_preview(body: ChatIn, request: Request):
+    """推荐先出片：规则层候选，不写会话、不跑 LLM。前端随后再打 /api/chat 补理由。"""
+    _rate_limit(f"chat:{request.client.host if request.client else 'unknown'}", 20, 60)
+    uid = _uid_from_auth(body.token, body.device_id)
+    history = []
+    if body.conversation_id:
+        if not _conversation_owned(body.conversation_id, uid):
+            raise HTTPException(404, "会话不存在")
+        history = _load_conversation_history(body.conversation_id, uid)
+    user_profile = None
+    prow = _personality_row(uid)
+    if prow:
+        try:
+            user_profile = json.loads(prow[0])
+        except (ValueError, TypeError):
+            user_profile = None
+    impl = _implicit_profile(uid)
+    like_genres = None
+    if impl:
+        user_profile = _merge_profiles(user_profile, impl)
+        like_genres = _signal_genres(uid)
+    reply = chat_mod.build_reply(
+        body.message, mode=body.mode, spoiler=body.spoiler,
+        history=history, movie_context=None, user_profile=user_profile,
+        like_genres=like_genres, exclude_ids=_signal_exclude_ids(uid), polish=False)
+    if reply.get("kind") != "recommend" or not reply.get("movies"):
+        return {"text": "", "offline": True, "citations": [], "kind": "skip", "movies": []}
+    kws = json.loads(prow[1]) if (prow and prow[1]) else []
+    for c in reply.get("movies") or []:
+        mm = data.movie(c.get("movie_id") or "")
+        if mm:
+            c["explain"] = recommend.explain_card(mm, user_profile, kws)
+    return reply
+
 
 def _resolve_user_id(device_id):
     con = _conn()
@@ -737,7 +776,9 @@ class SmsIn(BaseModel):
 def api_sms(body: SmsIn, request: Request):
     if not re.fullmatch(r"1\d{10}", body.phone):
         raise HTTPException(400, "手机号格式不对")
-    _rate_limit(f"sms:{request.client.host if request.client else 'unknown'}", 1, 60)
+    host = request.client.host if request.client else "unknown"
+    _rate_limit(f"sms:{body.phone}", 1, 60)
+    _rate_limit(f"sms-ip:{host}", 8, 60)
     code = f"{secrets.randbelow(1000000):06d}"   # 随机 6 位；未接短信通道，写日志供演示查收
     con = _conn()
     # 显式删旧插新（sms_codes 无 UNIQUE，OR REPLACE 不会替换）
@@ -746,8 +787,8 @@ def api_sms(body: SmsIn, request: Request):
                 (body.phone, code, time.time() + 600))
     con.commit(); con.close()
     logging.getLogger("cine.sms").info("验证码 %s -> %s（10 分钟内有效）", code[:3] + "***", body.phone[:3] + "****" + body.phone[-4:])
-    print(f"[演示验证码] {body.phone} -> {code}")   # 本地演示窗口直接可见；线上日志含全码便于自测
-    return {"message": "验证码已发送，请查看服务端日志（演示期未接短信通道）"}
+    print(f"[演示验证码] {body.phone} -> {code}")   # 本地演示窗口直接可见
+    return {"message": f"演示验证码 {code}（10 分钟内有效，未接短信通道）"}
 
 class RegisterIn(BaseModel):
     phone: str
@@ -889,7 +930,7 @@ def api_unfav(movie_id: str, token: str = ""):
 # ---------------- 行为反馈（B4：收藏/浏览/点卡/换片 → 隐式画像） ----------------
 class FeedbackIn(BaseModel):
     movie_id: str
-    kind: str          # fav / unfav / view / pick
+    kind: str          # fav / unfav / view / pick / seen / pass
 
 @app.post("/api/feedback")
 def api_feedback(body: FeedbackIn, token: str = ""):
@@ -897,7 +938,7 @@ def api_feedback(body: FeedbackIn, token: str = ""):
     row = con.execute("SELECT id FROM users WHERE token=?", (token,)).fetchone()
     if not row:
         con.close(); raise HTTPException(401, "未登录")
-    kind = body.kind if body.kind in ("fav", "unfav", "view", "pick") else "view"
+    kind = body.kind if body.kind in ("fav", "unfav", "view", "pick", "seen", "pass") else "view"
     con.execute("INSERT INTO user_signals(user_id,movie_id,kind,created_at) VALUES(?,?,?,?)",
                 (row[0], body.movie_id, kind, time.strftime("%F %T")))
     # 有界保留最近 200 条，防止 view 信号无界增长拖慢聊天热路径的画像计算
@@ -917,7 +958,7 @@ def _implicit_profile(uid: int) -> dict | None:
     con.close()
     if not rows:
         return None
-    weights = {"fav": 2.0, "pick": 1.0, "view": 0.8, "unfav": -2.0}
+    weights = {"fav": 2.0, "pick": 1.5, "view": 0.8, "unfav": -2.0, "pass": -2.0, "seen": 0.0}
     pos = {k: 0.0 for k in recommend.DNA_DIMS}
     neg = {k: 0.0 for k in recommend.DNA_DIMS}
     tp = tn = 0.0
@@ -972,7 +1013,7 @@ def _signal_genres(uid: int) -> dict | None:
     con.close()
     if not rows:
         return None
-    weights = {"fav": 2.0, "pick": 1.0, "view": 0.8, "unfav": -2.0}
+    weights = {"fav": 2.0, "pick": 1.5, "view": 0.8, "unfav": -2.0, "pass": -2.0, "seen": 0.0}
     cnt: dict[str, float] = {}
     for mid, kind in rows:
         m = data.movie(mid)
@@ -983,6 +1024,16 @@ def _signal_genres(uid: int) -> dict | None:
             cnt[g] = cnt.get(g, 0.0) + gw
     pos = {g: v for g, v in cnt.items() if v > 0}
     return dict(sorted(pos.items(), key=lambda x: -x[1])[:5]) or None
+
+
+def _signal_exclude_ids(uid: int) -> set:
+    """看过了 / 不对味 / 取消收藏：下一轮推荐不再出现。"""
+    con = _conn()
+    rows = con.execute(
+        "SELECT movie_id FROM user_signals WHERE user_id=? AND kind IN ('seen','pass','unfav')",
+        (uid,)).fetchall()
+    con.close()
+    return {r[0] for r in rows}
 
 # ---------------- 静态资源 ----------------
 BASE = Path(__file__).resolve().parent.parent

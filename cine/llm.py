@@ -67,6 +67,15 @@ def _cfg():
     except Exception:
         log.warning("llm_config.json 缺失或不可读，使用默认 base_url；key 走环境变量/本地 key 文件")
         cfg = {}
+    if os.environ.get("CINE_LLM_BASE_URL"):
+        cfg["base_url"] = os.environ["CINE_LLM_BASE_URL"]
+    chat_model = os.environ.get("CINE_LLM_CHAT_MODEL")
+    if chat_model:
+        models = cfg.get("models")
+        if not isinstance(models, dict):
+            models = {}
+            cfg["models"] = models
+        models["chat"] = chat_model
     keys: list[str] = []
     for k in ([os.environ.get("CINE_LLM_API_KEY")] + [_read_local_key()]
               + _read_backup_keys() + [cfg.get("api_key")]):
