@@ -88,3 +88,5 @@ desktop.ini
 .playwright-mcp/
 .zcode/
 detail-visual.png
+.vercel
+.env*
