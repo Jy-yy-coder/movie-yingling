@@ -125,17 +125,27 @@ export default function Explore() {
 function LibStateBridge({ params }: { params: Record<string, string> }) {
   const [q, setQ] = useState<Record<string, string>>(() => ({
     region: params.region || '', genre: params.genre || '', sort: params.sort || '', q: params.q || '', page: params.page || '',
+    year_min: params.year_min || '', year_max: params.year_max || '',
+    runtime_max: params.runtime_max || '',
   }))
   /* 外部深链变化（首页心情/搜索跳转）时重置内部状态 */
-  const key = [params.region, params.genre, params.sort, params.q].join('|')
+  const key = [params.region, params.genre, params.sort, params.q, params.year_min, params.year_max, params.runtime_max].join('|')
   useEffect(() => {
-    setQ({ region: params.region || '', genre: params.genre || '', sort: params.sort || '', q: params.q || '', page: '' })
+    setQ({ region: params.region || '', genre: params.genre || '', sort: params.sort || '', q: params.q || '', page: '',
+      year_min: params.year_min || '', year_max: params.year_max || '', runtime_max: params.runtime_max || '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
   const setParam = (patch: Record<string, string>) => {
     setQ((prev) => {
       const next = { ...prev, ...patch }
       if (!patch.page && next.page) delete next.page
+      const qs = new URLSearchParams({ tab: 'library' })
+      Object.entries(next).forEach(([k, v]) => { if (v) qs.set(k, v) })
+      history.replaceState(null, '', '#/explore?' + qs.toString())
+      try {
+        sessionStorage.setItem('cine_route_hash', '#/explore?' + qs.toString())
+        sessionStorage.setItem('cine_route_path', '/explore')
+      } catch { /* ignore */ }
       return next
     })
   }

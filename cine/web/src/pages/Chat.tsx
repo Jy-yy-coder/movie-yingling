@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { chat, cnTitle, feedback, num, watchOpening } from '../api'
-import type { ChatReply } from '../types'
+import { chat, chatPreview, cnTitle, feedback, num, watchOpening } from '../api'
+import type { ChatReply, RecCard } from '../types'
 import ExplainCard from '../components/ExplainCard'
 import WatchIntro from '../components/WatchIntro'
 
@@ -31,12 +31,22 @@ const QUICK = [
 ]
 
 /* 聊天主体面板：embed 时嵌入探索模式，否则由 Chat 包成右侧滑入整屏页 */
-export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; initialMovieId?: string }) {
+export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }: {
+  embed?: boolean
+  initialMovieId?: string
+  backHref?: string
+  backLabel?: string
+}) {
   /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画；普通会话尝试恢复上次聊天 */
   const stored = initialMovieId ? null : loadStored()
   const [mode, setMode] = useState<'rec' | 'talk'>(stored?.mode ?? (initialMovieId ? 'talk' : 'rec'))
   /* 无剧透默认开关（个人中心设置，默认开启） */
   const [spoiler, setSpoiler] = useState(() => localStorage.getItem('cine_spoiler_default') !== '0')
+  const toggleSpoiler = () => {
+    const v = !spoiler
+    setSpoiler(v)
+    localStorage.setItem('cine_spoiler_default', v ? '1' : '0')
+  }
   const [msgs, setMsgs] = useState<Msg[]>(stored?.msgs ?? [])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,6 +59,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
   const playedWatch = useRef(Boolean(initialMovieId))
   const logRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [dismissed, setDismissed] = useState<Record<string, 'seen' | 'pass'>>({})
 
   /* 消息/会话变化时写入 sessionStorage（陪看场景不持久化），刷新或返回后可续聊 */
   useEffect(() => {
@@ -61,12 +72,16 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgs, conversationId, resolvedMovieId])
 
+  const greet = (): Msg => ({
+    role: 'assistant',
+    text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
+  })
   const push = (m: Msg) => setMsgs((prev) => [...prev, m])
   const clear = () => {
-    setMsgs([])
     setConversationId(undefined) // 清空时创建新会话
     setResolvedMovieId(undefined)
     playedWatch.current = false  // 清空后允许重新播放陪看开场
+    setMsgs(movieId ? [] : [greet()])
     inputRef.current?.focus()
   }
 
@@ -76,36 +91,59 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
     setInput('')
     push({ role: 'user', text: msg })
     setBusy(true)
+    const placeholder: Msg = {
+      role: 'assistant',
+      text: mode === 'rec' ? '影灵正在选片…' : '影灵正在组织语言…',
+      reply: { text: '', offline: false, citations: [], kind: 'preview', preview: true, movies: [] },
+    }
+    push(placeholder)
+    const patchLast = (next: Msg) => setMsgs((prev) => {
+      const copy = prev.slice()
+      copy[copy.length - 1] = next
+      return copy
+    })
     try {
       const effMovieId = movieId ?? resolvedMovieId
+      if (mode === 'rec' && !effMovieId) {
+        try {
+          const prev = await chatPreview(msg, mode, spoiler, conversationId)
+          if (prev.movies && prev.movies.length) {
+            patchLast({ role: 'assistant', text: prev.text, reply: prev })
+          }
+        } catch { /* 预览失败则等完整回复 */ }
+      }
       const r = await chat(msg, mode, spoiler, conversationId, effMovieId)
       if (r.conversation_id && !conversationId) {
         setConversationId(r.conversation_id)
       }
-      /* 记住本轮聊中的电影（含推荐选片模式的电影问答），供后续追问携带 */
       if (r.movie_id) setResolvedMovieId(r.movie_id)
-      /* 陪看讨论中首次点名电影 → 同步详情页的开场动画（回复自带引导 chip） */
       if (mode === 'talk' && !movieId && !playedWatch.current && r.kind === 'talk' && r.movie) {
         playedWatch.current = true
-        afterIntroRef.current = () => push({ role: 'assistant', text: r.text, reply: r })
+        afterIntroRef.current = () => patchLast({ role: 'assistant', text: r.text, reply: r })
         setIntro(true)
       } else {
-        push({ role: 'assistant', text: r.text, reply: r })
+        patchLast({ role: 'assistant', text: r.text, reply: r })
       }
     } catch (e) {
-      push({ role: 'assistant', text: '连接失败：' + ((e as Error).message || '未知错误') })
+      patchLast({ role: 'assistant', text: '连接失败：' + ((e as Error).message || '未知错误') })
     } finally {
       setBusy(false)
     }
   }
 
+  const pickMovie = (id: string) => {
+    void feedback(id, 'pick').catch(() => {})
+    location.hash = '#/movie/' + id
+  }
+  const markCard = async (id: string, kind: 'seen' | 'pass') => {
+    setDismissed((d) => ({ ...d, [id]: kind }))
+    await feedback(id, kind).catch(() => {})
+  }
+
   useEffect(() => {
     /* 陪看场景不发通用问候，等开场动画后由开场话题接管 */
     if (!msgs.length && !movieId) {
-      push({
-        role: 'assistant',
-        text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
-      })
+      push(greet())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -148,6 +186,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
         </AnimatePresence>
 
         <div className="chat-head">
+          {backHref && <a className="chat-back" href={backHref}>{backLabel || '返回 ›'}</a>}
           <h1 className="chat-title title-gold">问影灵</h1>
           <p className="chat-sub">推荐 · 陪看讨论 · 找评论 —— AI 只改表述，口碑忠于真实短评</p>
           <div className="chat-toolbar">
@@ -155,7 +194,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
               <button className={`chat-mode ${mode === 'rec' ? 'on' : ''}`} onClick={() => { setMode('rec'); clear() }}>推荐选片</button>
               <button className={`chat-mode ${mode === 'talk' ? 'on' : ''}`} onClick={() => { setMode('talk'); clear() }}>陪看讨论</button>
             </div>
-            <button className={`chat-spoiler ${spoiler ? 'off' : ''}`} onClick={() => setSpoiler(!spoiler)}>
+            <button className={`chat-spoiler ${spoiler ? 'off' : ''}`} onClick={toggleSpoiler}>
               {spoiler ? '🛡️ 无剧透已开' : '无剧透关闭'}
             </button>
             <button className="chat-clear t-mono" onClick={clear}>清空</button>
@@ -178,16 +217,10 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
                 {m.reply?.movies && m.reply.movies.length > 0 && (
                   <div className="chat-movies">
                     {m.reply.movies.map((card) => (
-                      <button key={card.movie_id} className="chat-movie" onClick={() => { void feedback(card.movie_id, 'pick'); location.hash = '#/movie/' + card.movie_id }}>
-                        <span className="chat-movie-poster">
-                          {card.poster_thumb ? <img src={card.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(card.title)}</i>}
-                          <em className="chat-movie-match">{card.match}%</em>
-                        </span>
-                        <span className="chat-movie-title">{cnTitle(card.title)}</span>
-                        <span className="chat-movie-meta t-mono">{card.year || '—'} · 豆瓣 {card.rating}</span>
-                        <span className="chat-movie-reason">{card.reason.slice(0, 30)}</span>
-                        {card.explain && <ExplainCard explain={card.explain} />}
-                      </button>
+                      <RecMovieCard key={card.movie_id} card={card} mark={dismissed[card.movie_id]}
+                        onPick={() => pickMovie(card.movie_id)}
+                        onSeen={() => void markCard(card.movie_id, 'seen')}
+                        onPass={() => void markCard(card.movie_id, 'pass')} />
                     ))}
                   </div>
                 )}
@@ -195,16 +228,10 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
                 {/* 单部推荐卡（talk 模式） */}
                 {m.reply?.movie && (
                   <div className="chat-movies">
-                    <button key={m.reply.movie.movie_id} className="chat-movie" onClick={() => { void feedback(m.reply!.movie!.movie_id, 'pick'); location.hash = '#/movie/' + m.reply!.movie!.movie_id }}>
-                      <span className="chat-movie-poster">
-                        {m.reply.movie.poster_thumb ? <img src={m.reply.movie.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(m.reply.movie.title)}</i>}
-                        <em className="chat-movie-match">{m.reply.movie.match}%</em>
-                      </span>
-                      <span className="chat-movie-title">{cnTitle(m.reply.movie.title)}</span>
-                      <span className="chat-movie-meta t-mono">{m.reply.movie.year || '—'} · 豆瓣 {m.reply.movie.rating}</span>
-                      <span className="chat-movie-reason">{m.reply.movie.reason.slice(0, 30)}</span>
-                      {m.reply.movie.explain && <ExplainCard explain={m.reply.movie.explain} />}
-                    </button>
+                    <RecMovieCard card={m.reply.movie} mark={dismissed[m.reply.movie.movie_id]}
+                      onPick={() => pickMovie(m.reply!.movie!.movie_id)}
+                      onSeen={() => void markCard(m.reply!.movie!.movie_id, 'seen')}
+                      onPass={() => void markCard(m.reply!.movie!.movie_id, 'pass')} />
                   </div>
                 )}
 
@@ -233,7 +260,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
               </div>
             </div>
           ))}
-          {busy && (
+          {busy && !msgs[msgs.length - 1]?.reply?.movies?.length && !msgs[msgs.length - 1]?.reply?.preview && (
             <div className="msg assistant">
               <div className="bub typing"><i /><i /><i /> 影灵正在组织语言…</div>
             </div>
@@ -271,8 +298,47 @@ export default function Chat({ movieId }: { movieId?: string }) {
       initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
       transition={{ duration: 0.55, ease: [0.32, 0.72, 0.35, 1] }}
     >
-      <a className="page-back page-back-r" href="#/">返回银河 ›</a>
-      <ChatPanel initialMovieId={movieId} />
+      <ChatPanel
+        initialMovieId={movieId}
+        backHref={movieId ? `#/movie/${movieId}` : '#/'}
+        backLabel={movieId ? '‹ 返回影片' : '返回银河 ›'}
+      />
     </motion.div>
+  )
+}
+
+function RecMovieCard({ card, mark, onPick, onSeen, onPass }: {
+  card: RecCard
+  mark?: 'seen' | 'pass'
+  onPick: () => void
+  onSeen: () => void
+  onPass: () => void
+}) {
+  return (
+    <div className={'chat-movie' + (mark ? ' dim' : '')}>
+      <button type="button" className="chat-movie-main" onClick={onPick} disabled={Boolean(mark)}>
+        <span className="chat-movie-poster">
+          {card.poster_thumb ? <img src={card.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(card.title)}</i>}
+          <em className="chat-movie-match">{card.match}%</em>
+        </span>
+        <span className="chat-movie-title">{cnTitle(card.title)}</span>
+        <span className="chat-movie-meta t-mono">
+          {card.year || '—'}
+          {card.runtime_min ? ` · ${card.runtime_min}分` : ''}
+          {' · 豆瓣 '}{card.rating}
+        </span>
+        <span className="chat-movie-reason">{card.reason.slice(0, 30)}</span>
+        {card.explain && <ExplainCard explain={card.explain} />}
+      </button>
+      {mark ? (
+        <div className="chat-movie-mark">{mark === 'seen' ? '已看过 · 下次避开' : '已记下不对味'}</div>
+      ) : (
+        <div className="chat-movie-actions">
+          <button type="button" onClick={onSeen}>看过了</button>
+          <button type="button" onClick={onPass}>不对味</button>
+          <button type="button" className="go" onClick={onPick}>就它了</button>
+        </div>
+      )}
+    </div>
   )
 }

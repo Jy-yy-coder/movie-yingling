@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """赛前审查修复的回归：身份合并、无剧透推荐、标题路由、鉴权边角。"""
 from __future__ import annotations
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from pathlib import Path
 
 from cine import chat as chat_mod
 from cine import data
+from cine import recommend as rec_mod
 
 
 def _offline_llm():
@@ -54,6 +56,49 @@ class TestTitleAndSpoiler(unittest.TestCase):
             data.movie(r["movies"][0]["movie_id"]), safe=True)
         self.assertNotIn("简介", facts)
 
+    def test_parents_hint_is_family(self):
+        h = rec_mod.parse_hint("有没有适合带父母一起看的")
+        self.assertEqual(h["genre"], "家庭")
+        self.assertEqual(h["dim"], "情感")
+        ms = rec_mod.recommend("有没有适合带父母一起看的", limit=4)
+        self.assertTrue(ms)
+        self.assertTrue(all("家庭" in (m.get("genres") or []) for m in ms))
+
+    def test_wenyi_rainy_not_global_top(self):
+        h = rec_mod.parse_hint("适合下雨天窝沙发看的文艺片")
+        self.assertEqual(h["dim"], "情感")
+        ids = [m["movie_id"] for m in rec_mod.recommend("适合下雨天窝沙发看的文艺片", limit=4)]
+        self.assertNotIn("1293182", ids)  # 十二怒汉不应再因「无意图」霸榜
+
+    def test_tearjerker_jp_anime_ranks_emotion(self):
+        h = rec_mod.parse_hint("推荐一部催泪的日本动画")
+        self.assertEqual((h["genre"], h["region"], h["dim"]), ("动画", "日本", "情感"))
+        titles = [m["title"] for m in rec_mod.recommend("推荐一部催泪的日本动画", limit=4)]
+        self.assertTrue(any("千与千寻" in t or "龙猫" in t for t in titles))
+
+    def test_two_hour_runtime_hint(self):
+        h = rec_mod.parse_hint("想轻松两小时，来点搞笑的")
+        self.assertEqual(h["runtime_max"], 120)
+        self.assertEqual(h["genre"], "喜剧")
+        for m in rec_mod.recommend("想轻松两小时，来点搞笑的", limit=6):
+            rt = m.get("runtime_min") or 0
+            if rt:
+                self.assertLessEqual(rt, 120, m["title"])
+
+    def test_soft_spoiler_guard(self):
+        leak = "安迪的结局简直让人泪目，充满了希望和奇迹。"
+        blocked = chat_mod._guard_spoilers(leak, True)
+        self.assertNotIn("希望和奇迹", blocked)
+        self.assertIn("无剧透", blocked)
+        self.assertEqual(chat_mod._guard_spoilers(leak, False), leak)
+
+    def test_preview_skips_llm(self):
+        r = chat_mod.build_reply("推荐一部燃的科幻片", spoiler=True, polish=False)
+        self.assertEqual(r["kind"], "recommend")
+        self.assertTrue(r.get("preview"))
+        self.assertGreaterEqual(len(r.get("movies") or []), 1)
+        self.assertIn("理由马上到", r.get("text") or "")
+
 
 class TestAuthMerge(unittest.TestCase):
     @classmethod
@@ -64,11 +109,19 @@ class TestAuthMerge(unittest.TestCase):
         main.DB_PATH = cls.db
         main._init_db()
         data.load()
+        _offline_llm()
         from fastapi.testclient import TestClient
         cls.client = TestClient(main.app, raise_server_exceptions=True)
 
     def _phone(self, suffix: str) -> str:
         return ("138" + suffix.zfill(8))[:11]
+
+    def _sms_code(self, phone: str) -> str:
+        r = self.client.post("/api/auth/sms", json={"phone": phone})
+        self.assertEqual(r.status_code, 200, r.text)
+        m = re.search(r"(\d{6})", r.json().get("message") or "")
+        self.assertTrue(m, r.text)
+        return m.group(1)
 
     def test_spa_hosted(self):
         r = self.client.get("/")
@@ -79,16 +132,17 @@ class TestAuthMerge(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertNotIn("dev_code", body)
+        self.assertRegex(body.get("message") or "", r"\d{6}")
 
     def test_sms_replay_rejected(self):
         phone = self._phone("10000002")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         ok = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_reg_a",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_reg_a",
         })
         self.assertEqual(ok.status_code, 200, ok.text)
         again = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_reg_a",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_reg_a",
         })
         self.assertEqual(again.status_code, 400)
 
@@ -98,9 +152,9 @@ class TestAuthMerge(unittest.TestCase):
         mid = items[0]["movie_id"]
 
         phone = self._phone("10000003")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         acc = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_acct",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_acct",
         }).json()
         uid = acc["user_id"]
 
@@ -139,9 +193,9 @@ class TestAuthMerge(unittest.TestCase):
 
     def test_login_merged_false_without_guest(self):
         phone = self._phone("10000004")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_only",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_only",
         })
         login = self.client.post("/api/auth/login", json={
             "phone": phone, "password": "123456", "device_id": "d_never_guest",
@@ -151,9 +205,9 @@ class TestAuthMerge(unittest.TestCase):
 
     def test_guest_does_not_overwrite_registered_token(self):
         phone = self._phone("10000005")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         acc = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_same",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_same",
         }).json()
         stolen = self.client.post("/api/auth/guest", json={"device_id": "d_same"})
         self.assertEqual(stolen.status_code, 200)

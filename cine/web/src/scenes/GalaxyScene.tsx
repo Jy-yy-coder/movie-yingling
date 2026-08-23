@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { EffectComposer, Bloom } from '@react-three/postprocessing'
@@ -97,11 +97,35 @@ function CameraRig() {
 
 export default function GalaxyScene() {
   const planets = useGalaxy((s) => s.planets)
+  /* overlay 打开时降载：停掉 Bloom / 降 DPR，避免探索/详情下风扇狂转 */
+  const [quiet, setQuiet] = useState(() => {
+    const h = (typeof location !== 'undefined' ? location.hash : '') || '#/'
+    const path = h.split('?')[0]
+    const overlay = path !== '#/' && path !== '#' && path !== ''
+    const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return overlay || reduce
+  })
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => {
+      const path = (location.hash || '#/').split('?')[0]
+      const overlay = path !== '#/' && path !== '#' && path !== ''
+      setQuiet(overlay || mq.matches)
+    }
+    mq.addEventListener('change', apply)
+    window.addEventListener('hashchange', apply)
+    apply()
+    return () => {
+      mq.removeEventListener('change', apply)
+      window.removeEventListener('hashchange', apply)
+    }
+  }, [])
   return (
     <Canvas
       camera={{ position: [-46, 30, 79], fov: 58 }}
-      dpr={[1, 2]}
-      gl={{ antialias: true, powerPreference: 'high-performance' }}
+      dpr={quiet ? 1 : [1, 2]}
+      frameloop={quiet ? 'demand' : 'always'}
+      gl={{ antialias: !quiet, powerPreference: 'high-performance' }}
       style={{ position: 'fixed', inset: 0 }}
     >
       <color attach="background" args={['#05060a']} />
@@ -113,9 +137,11 @@ export default function GalaxyScene() {
         <PlanetLayer planets={planets} />
       </GlobeSpin>
       <CameraRig />
-      <EffectComposer>
-        <Bloom intensity={1.7} luminanceThreshold={0.2} luminanceSmoothing={0.35} mipmapBlur radius={0.8} />
-      </EffectComposer>
+      {!quiet && (
+        <EffectComposer>
+          <Bloom intensity={1.7} luminanceThreshold={0.2} luminanceSmoothing={0.35} mipmapBlur radius={0.8} />
+        </EffectComposer>
+      )}
     </Canvas>
   )
 }

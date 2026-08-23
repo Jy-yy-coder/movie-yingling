@@ -112,7 +112,7 @@ export default function Login() {
             <label className="login-field">
               <span>验证码</span>
               <div className="login-code-row">
-                <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="演示期固定 246810" />
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6 位验证码" inputMode="numeric" />
                 <button className="login-code-btn" onClick={() => void sendCode()} disabled={countdown > 0 || busy}>
                   {countdown > 0 ? `${countdown}s` : '获取验证码'}
                 </button>

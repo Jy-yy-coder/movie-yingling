@@ -14,8 +14,9 @@ export default function ExplainCard({ explain }: { explain: ExplainData }) {
       <span
         className={`explain-trigger${open ? ' on' : ''}`}
         onClick={toggle}
-        onKeyDown={(e) => { if (e.key === 'Enter') toggle(e as unknown as React.MouseEvent) }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as unknown as React.MouseEvent) } }}
         role="button"
+        tabIndex={0}
         aria-expanded={open}
       >
         {open ? '✦ 收起推荐解释' : '✦ 为什么推荐这部？'}
