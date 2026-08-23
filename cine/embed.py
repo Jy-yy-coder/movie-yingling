@@ -8,8 +8,12 @@ os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
 
 import logging
 import threading
-import numpy as np
 from pathlib import Path
+
+try:
+    import numpy as np            # 本地向量检索用；serverless 未装 numpy 时整体降级
+except ImportError:               # pragma: no cover - 部署环境
+    np = None
 
 log = logging.getLogger("cine.embed")
 
@@ -49,6 +53,8 @@ def _ensure_loaded():
 
 def available() -> bool:
     """向量检索是否可用（模型 + npz 都在）。"""
+    if np is None:
+        return False
     _ensure_loaded()
     return _model is not None and _vectors is not None
 
