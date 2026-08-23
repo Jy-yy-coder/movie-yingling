@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """赛前审查修复的回归：身份合并、无剧透推荐、标题路由、鉴权边角。"""
 from __future__ import annotations
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -64,11 +65,19 @@ class TestAuthMerge(unittest.TestCase):
         main.DB_PATH = cls.db
         main._init_db()
         data.load()
+        _offline_llm()
         from fastapi.testclient import TestClient
         cls.client = TestClient(main.app, raise_server_exceptions=True)
 
     def _phone(self, suffix: str) -> str:
         return ("138" + suffix.zfill(8))[:11]
+
+    def _sms_code(self, phone: str) -> str:
+        r = self.client.post("/api/auth/sms", json={"phone": phone})
+        self.assertEqual(r.status_code, 200, r.text)
+        m = re.search(r"(\d{6})", r.json().get("message") or "")
+        self.assertTrue(m, r.text)
+        return m.group(1)
 
     def test_spa_hosted(self):
         r = self.client.get("/")
@@ -79,16 +88,17 @@ class TestAuthMerge(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertNotIn("dev_code", body)
+        self.assertRegex(body.get("message") or "", r"\d{6}")
 
     def test_sms_replay_rejected(self):
         phone = self._phone("10000002")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         ok = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_reg_a",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_reg_a",
         })
         self.assertEqual(ok.status_code, 200, ok.text)
         again = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_reg_a",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_reg_a",
         })
         self.assertEqual(again.status_code, 400)
 
@@ -98,9 +108,9 @@ class TestAuthMerge(unittest.TestCase):
         mid = items[0]["movie_id"]
 
         phone = self._phone("10000003")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         acc = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_acct",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_acct",
         }).json()
         uid = acc["user_id"]
 
@@ -139,9 +149,9 @@ class TestAuthMerge(unittest.TestCase):
 
     def test_login_merged_false_without_guest(self):
         phone = self._phone("10000004")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_only",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_only",
         })
         login = self.client.post("/api/auth/login", json={
             "phone": phone, "password": "123456", "device_id": "d_never_guest",
@@ -151,9 +161,9 @@ class TestAuthMerge(unittest.TestCase):
 
     def test_guest_does_not_overwrite_registered_token(self):
         phone = self._phone("10000005")
-        self.client.post("/api/auth/sms", json={"phone": phone})
+        code = self._sms_code(phone)
         acc = self.client.post("/api/auth/register", json={
-            "phone": phone, "code": "246810", "password": "123456", "device_id": "d_same",
+            "phone": phone, "code": code, "password": "123456", "device_id": "d_same",
         }).json()
         stolen = self.client.post("/api/auth/guest", json={"device_id": "d_same"})
         self.assertEqual(stolen.status_code, 200)

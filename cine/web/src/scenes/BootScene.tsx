@@ -241,7 +241,17 @@ export default function BootScene() {
             ))}
           </motion.div>
 
-          <button className="boot-skip" onClick={() => { sessionStorage.setItem('cine_booted', '1'); setBooted(true) }}>跳过 进入宇宙 ›</button>
+          <button
+            type="button"
+            className="boot-skip"
+            onPointerDown={(e) => { e.stopPropagation(); e.preventDefault() }}
+            onPointerUp={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation()
+              sessionStorage.setItem('cine_booted', '1')
+              setBooted(true)
+            }}
+          >跳过 进入宇宙 ›</button>
         </motion.div>
       )}
     </AnimatePresence>

@@ -33,8 +33,9 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
     localStorage.setItem('cine_spoiler_default', v ? '1' : '0')
   }
 
+  const [confirming, setConfirming] = useState(false)
+
   const clearLocal = () => {
-    if (!confirm('清除本机全部本地数据？（设备身份与偏好设置将重置）')) return
     Object.keys(localStorage).filter((k) => k.startsWith('cine_')).forEach((k) => localStorage.removeItem(k))
     location.hash = '#/'
     location.reload()
@@ -124,7 +125,22 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
               </div>
               <div className="set-row">
                 <span className="set-lab">本地数据</span>
-                <button className="set-danger" onClick={clearLocal}>清除全部</button>
+                {confirming ? (
+                  <span className="set-confirm">
+                    <button className="set-danger" onClick={clearLocal}>确认清除</button>
+                    <button className="set-cancel" type="button" onClick={() => setConfirming(false)}>取消</button>
+                  </span>
+                ) : (
+                  <button className="set-danger" type="button" onClick={() => setConfirming(true)}>清除全部</button>
+                )}
+              </div>
+              <div className="set-row">
+                <span className="set-lab">关于影灵</span>
+                <a className="set-link" href="#/about">数据口径与原则 →</a>
+              </div>
+              <div className="set-row">
+                <span className="set-lab">探索档案</span>
+                <a className="set-link" href="#/profile">等级 / 徽章 →</a>
               </div>
               <div className="set-row">
                 <span className="set-lab">登录状态</span>

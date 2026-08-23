@@ -119,7 +119,10 @@ export function ListPanel({ q, setParam, embed = false }: {
                   <span className="list-card-poster">
                     {m.poster_thumb ? <img src={m.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(m.title)}</i>}
                     <em className="t-mono">{m.rating}</em>
-                    {m.dna && <b className="list-card-dim t-mono">{DNA_DIMS.reduce((a, d) => (m.dna[d] || 0) > (m.dna[a] || 0) ? d : a, DNA_DIMS[0])} {m.dna[DNA_DIMS.reduce((a, d) => (m.dna[d] || 0) > (m.dna[a] || 0) ? d : a, DNA_DIMS[0])]}</b>}
+                    {m.dna && (() => {
+                      const dim = DNA_DIMS.reduce((a, d) => (m.dna[d] || 0) > (m.dna[a] || 0) ? d : a, DNA_DIMS[0])
+                      return <b className="list-card-dim t-mono">{dim} {m.dna[dim]}</b>
+                    })()}
                   </span>
                   <span className="list-card-title">{cnTitle(m.title)}</span>
                   <span className="list-card-meta t-mono">{m.year || ''} · {regionLabel(m.region)} · {m.genres?.[0] || ''}</span>

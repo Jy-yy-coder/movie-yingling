@@ -67,10 +67,12 @@ export default function App() {
       .finally(() => setGalaxyRetrying(false))
   }
 
-  /* 进入详情页前记住来源页（详情页退出时回到来源，而不是一律跳回银河） */
+  /* 进入详情页前记住来源页（详情页退出时回到来源，而不是一律跳回银河）
+     电影→电影（相似片）时保留最初来源，避免关闭后掉回银河 */
   useEffect(() => {
     if (route.path === '/movie') {
-      sessionStorage.setItem('cine_detail_from', sessionStorage.getItem('cine_route_now') || '/')
+      const now = sessionStorage.getItem('cine_route_now') || '/'
+      if (now !== '/movie') sessionStorage.setItem('cine_detail_from', now)
     }
     sessionStorage.setItem('cine_route_now', route.path)
   }, [route])
@@ -101,7 +103,7 @@ export default function App() {
       <HUD />
       {galaxyErr && (
         <div className="glass toast-banner" role="alert">
-          <span>{galaxyRetrying ? '正在重新加载银河…' : '⚠ 银河数据加载失败，请确认后端已启动（端口 8010）'}</span>
+          <span>{galaxyRetrying ? '正在重新加载银河…' : '⚠ 银河数据加载失败，请稍后重试'}</span>
           <button className="t-mono" type="button" onClick={retryGalaxy} disabled={galaxyRetrying}>
             {galaxyRetrying ? '重试中' : '重试'}
           </button>

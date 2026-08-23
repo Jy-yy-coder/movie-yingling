@@ -603,6 +603,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   color: var(--color-dust-500); font-size: 12px; letter-spacing: 2px;
   padding: 7px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px;
   background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(6px); transition: color .3s, border-color .3s;
+  pointer-events: auto; touch-action: manipulation;
 }
 .boot-skip:hover { color: var(--color-gold-300); border-color: rgba(240, 217, 160, 0.4); }
 
@@ -897,7 +898,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   padding: 58px clamp(20px, 6vw, 60px) 26px;
 }
 .chat > * { width: min(900px, 100%); }
-.chat-head { flex: none; }
+.chat-head { flex: none; padding-right: 148px; }
 .chat-title { font-size: 24px; letter-spacing: 3px; }
 .chat-sub { font-size: 12px; color: var(--color-dust-500); margin-top: 5px; letter-spacing: 1px; }
 .chat-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
@@ -1196,6 +1197,17 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   padding: 5px 14px; border-radius: 999px; transition: var(--ease-ui);
 }
 .set-danger:hover { background: rgba(255, 157, 122, 0.12); }
+.set-confirm { display: inline-flex; align-items: center; gap: 8px; }
+.set-cancel {
+  font-size: 12px; color: var(--color-dust-500); border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 5px 14px; border-radius: 999px; transition: var(--ease-ui);
+}
+.set-cancel:hover { color: var(--color-dust-100); border-color: rgba(255, 255, 255, 0.3); }
+.set-link {
+  font-size: 12px; color: var(--color-gold-300); letter-spacing: 1px;
+  padding: 5px 4px; transition: var(--ease-ui);
+}
+.set-link:hover { color: var(--color-gold-200); }
 
 /* ================= 关于 ================= */
 .about {
@@ -1644,9 +1656,17 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 /* ---------- 新增响应式 ---------- */
 @media (max-width: 860px) {
   .hud-side { display: none; }
-  .hud-guide { display: none; }
+  .hud-guide {
+    right: 12px; left: 12px; bottom: 78px; z-index: 43;
+    justify-content: center;
+  }
+  .hud-guide-arrow { display: none; }
+  .hud-guide-txt { padding: 8px 12px; }
+  .hud-guide-txt b { font-size: 12px; }
+  .hud-guide-txt span { font-size: 10.5px; letter-spacing: 0.5px; }
   .navi { padding: 22px 18px; }
-  .chat { padding: 58px 16px 22px; }
+  .chat { padding: 72px 16px 22px; }
+  .chat-head { padding-right: 0; }
   .list { padding: 60px 18px 46px; }
   .explore-nav { gap: 10px; }
   .explore-logo { display: none; }
@@ -1754,6 +1774,13 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .watch-title-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .watch-title-txt { font-size: 24px; letter-spacing: 6px; }
 .watch-start { font-size: 12px; letter-spacing: 3px; color: var(--color-dust-600); }
+.watch-skip {
+  position: absolute; right: 18px; top: 16px; z-index: 2;
+  color: var(--color-dust-500); font-size: 12px; letter-spacing: 2px;
+  padding: 7px 14px; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04); backdrop-filter: blur(6px); transition: color .3s, border-color .3s;
+}
+.watch-skip:hover { color: var(--color-gold-300); border-color: rgba(240, 217, 160, 0.4); }
 
 /* 陪看引导话题 chip */
 .chat-follow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }

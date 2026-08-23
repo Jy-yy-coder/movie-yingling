@@ -37,6 +37,11 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
   const [mode, setMode] = useState<'rec' | 'talk'>(stored?.mode ?? (initialMovieId ? 'talk' : 'rec'))
   /* 无剧透默认开关（个人中心设置，默认开启） */
   const [spoiler, setSpoiler] = useState(() => localStorage.getItem('cine_spoiler_default') !== '0')
+  const toggleSpoiler = () => {
+    const v = !spoiler
+    setSpoiler(v)
+    localStorage.setItem('cine_spoiler_default', v ? '1' : '0')
+  }
   const [msgs, setMsgs] = useState<Msg[]>(stored?.msgs ?? [])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -61,12 +66,16 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [msgs, conversationId, resolvedMovieId])
 
+  const greet = (): Msg => ({
+    role: 'assistant',
+    text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
+  })
   const push = (m: Msg) => setMsgs((prev) => [...prev, m])
   const clear = () => {
-    setMsgs([])
     setConversationId(undefined) // 清空时创建新会话
     setResolvedMovieId(undefined)
     playedWatch.current = false  // 清空后允许重新播放陪看开场
+    setMsgs(movieId ? [] : [greet()])
     inputRef.current?.focus()
   }
 
@@ -102,10 +111,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
   useEffect(() => {
     /* 陪看场景不发通用问候，等开场动画后由开场话题接管 */
     if (!msgs.length && !movieId) {
-      push({
-        role: 'assistant',
-        text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
-      })
+      push(greet())
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -155,7 +161,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
               <button className={`chat-mode ${mode === 'rec' ? 'on' : ''}`} onClick={() => { setMode('rec'); clear() }}>推荐选片</button>
               <button className={`chat-mode ${mode === 'talk' ? 'on' : ''}`} onClick={() => { setMode('talk'); clear() }}>陪看讨论</button>
             </div>
-            <button className={`chat-spoiler ${spoiler ? 'off' : ''}`} onClick={() => setSpoiler(!spoiler)}>
+            <button className={`chat-spoiler ${spoiler ? 'off' : ''}`} onClick={toggleSpoiler}>
               {spoiler ? '🛡️ 无剧透已开' : '无剧透关闭'}
             </button>
             <button className="chat-clear t-mono" onClick={clear}>清空</button>

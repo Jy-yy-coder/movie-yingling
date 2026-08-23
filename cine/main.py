@@ -737,7 +737,9 @@ class SmsIn(BaseModel):
 def api_sms(body: SmsIn, request: Request):
     if not re.fullmatch(r"1\d{10}", body.phone):
         raise HTTPException(400, "手机号格式不对")
-    _rate_limit(f"sms:{request.client.host if request.client else 'unknown'}", 1, 60)
+    host = request.client.host if request.client else "unknown"
+    _rate_limit(f"sms:{body.phone}", 1, 60)
+    _rate_limit(f"sms-ip:{host}", 8, 60)
     code = f"{secrets.randbelow(1000000):06d}"   # 随机 6 位；未接短信通道，写日志供演示查收
     con = _conn()
     # 显式删旧插新（sms_codes 无 UNIQUE，OR REPLACE 不会替换）
@@ -746,8 +748,8 @@ def api_sms(body: SmsIn, request: Request):
                 (body.phone, code, time.time() + 600))
     con.commit(); con.close()
     logging.getLogger("cine.sms").info("验证码 %s -> %s（10 分钟内有效）", code[:3] + "***", body.phone[:3] + "****" + body.phone[-4:])
-    print(f"[演示验证码] {body.phone} -> {code}")   # 本地演示窗口直接可见；线上日志含全码便于自测
-    return {"message": "验证码已发送，请查看服务端日志（演示期未接短信通道）"}
+    print(f"[演示验证码] {body.phone} -> {code}")   # 本地演示窗口直接可见
+    return {"message": f"演示验证码 {code}（10 分钟内有效，未接短信通道）"}
 
 class RegisterIn(BaseModel):
     phone: str

@@ -136,6 +136,9 @@ function LibStateBridge({ params }: { params: Record<string, string> }) {
     setQ((prev) => {
       const next = { ...prev, ...patch }
       if (!patch.page && next.page) delete next.page
+      const qs = new URLSearchParams({ tab: 'library' })
+      Object.entries(next).forEach(([k, v]) => { if (v) qs.set(k, v) })
+      history.replaceState(null, '', '#/explore?' + qs.toString())
       return next
     })
   }

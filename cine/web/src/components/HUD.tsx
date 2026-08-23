@@ -7,6 +7,7 @@ import { regionLabel } from '../regions'
 const GENRES = ['剧情', '喜剧', '动作', '爱情', '科幻', '犯罪', '悬疑', '动画', '奇幻', '家庭', '战争', '恐怖']
 
 export default function HUD() {
+  const booted = useGalaxy((s) => s.booted)
   const hoverId = useGalaxy((s) => s.hoverId)
   const hoverPos = useGalaxy((s) => s.hoverPos)
   const focusRegion = useGalaxy((s) => s.focusRegion)
@@ -20,6 +21,8 @@ export default function HUD() {
     sessionStorage.setItem('cine_guided', '1')
     setGuide(false)
   }
+
+  if (!booted) return null
 
   return (
     <>

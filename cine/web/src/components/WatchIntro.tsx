@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 /* 陪看开场动画（约 4.5 秒）：灯光渐暗 → 3·2·1 倒数 → 「开始放映」 */
@@ -12,12 +12,17 @@ const PHASES = [
 
 export default function WatchIntro({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState(0)
+  /* 父组件每次渲染都会换新的 onDone；放 ref 里避免倒计时被重置 */
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
 
   useEffect(() => {
-    if (step >= PHASES.length) { onDone(); return }
+    if (step >= PHASES.length) { onDoneRef.current(); return }
     const t = setTimeout(() => setStep((s) => s + 1), PHASES[step].ms)
     return () => clearTimeout(t)
-  }, [step, onDone])
+  }, [step])
+
+  const skip = () => onDoneRef.current()
 
   const phase = step < PHASES.length ? PHASES[step].key : 'title'
   return (
@@ -26,6 +31,7 @@ export default function WatchIntro({ onDone }: { onDone: () => void }) {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
     >
+      <button type="button" className="watch-skip" onClick={skip}>跳过 ›</button>
       <AnimatePresence mode="wait">
         {phase === 'dim' && (
           <motion.p
