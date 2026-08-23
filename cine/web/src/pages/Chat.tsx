@@ -13,15 +13,21 @@ interface Msg {
   reply?: ChatReply
 }
 
-/* 刷新/返回后恢复聊天（仅普通会话；陪看场景与具体电影绑定，不恢复） */
-const CHAT_STORE = 'cine_chat_session_v1'
+/* 刷新/返回后恢复聊天（仅普通会话；陪看场景与具体电影绑定，不恢复）。
+   推荐选片与陪看讨论各存一份，切换模式时各自显示各自的记录 */
+const storeKey = (mode: 'rec' | 'talk') => `cine_chat_session_v1_${mode}`
 type Stored = { mode: 'rec' | 'talk'; msgs: Msg[]; conversationId?: number; resolvedMovieId?: string }
-const loadStored = (): Stored | null => {
+const loadStored = (mode: 'rec' | 'talk'): Stored | null => {
   try {
-    const raw = sessionStorage.getItem(CHAT_STORE)
+    const raw = sessionStorage.getItem(storeKey(mode))
     return raw ? (JSON.parse(raw) as Stored) : null
   } catch { return null }
 }
+
+const greetMsg = (): Msg => ({
+  role: 'assistant',
+  text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
+})
 
 const QUICK = [
   '推荐一部催泪的日本电影',
@@ -37,9 +43,10 @@ export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }
   backHref?: string
   backLabel?: string
 }) {
-  /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画；普通会话尝试恢复上次聊天 */
-  const stored = initialMovieId ? null : loadStored()
-  const [mode, setMode] = useState<'rec' | 'talk'>(stored?.mode ?? (initialMovieId ? 'talk' : 'rec'))
+  /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画；普通会话按模式恢复各自的聊天 */
+  const initMode: 'rec' | 'talk' = initialMovieId ? 'talk' : 'rec'
+  const stored = initialMovieId ? null : loadStored(initMode)
+  const [mode, setMode] = useState<'rec' | 'talk'>(initMode)
   /* 无剧透默认开关（个人中心设置，默认开启） */
   const [spoiler, setSpoiler] = useState(() => localStorage.getItem('cine_spoiler_default') !== '0')
   const toggleSpoiler = () => {
@@ -47,7 +54,10 @@ export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }
     setSpoiler(v)
     localStorage.setItem('cine_spoiler_default', v ? '1' : '0')
   }
-  const [msgs, setMsgs] = useState<Msg[]>(stored?.msgs ?? [])
+  /* 初始消息：恢复的历史或欢迎语（作为初始状态而非 effect push，避免 StrictMode 双挂载产生两条欢迎语） */
+  const [msgs, setMsgs] = useState<Msg[]>(
+    stored?.msgs?.length ? stored.msgs : (initialMovieId ? [] : [greetMsg()])
+  )
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [conversationId, setConversationId] = useState<number | undefined>(stored?.conversationId)
@@ -65,23 +75,30 @@ export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }
   useEffect(() => {
     if (initialMovieId) return
     if (!msgs.length && !conversationId) {
-      sessionStorage.removeItem(CHAT_STORE)
+      sessionStorage.removeItem(storeKey(mode))
       return
     }
-    sessionStorage.setItem(CHAT_STORE, JSON.stringify({ mode, msgs, conversationId, resolvedMovieId }))
+    sessionStorage.setItem(storeKey(mode), JSON.stringify({ mode, msgs, conversationId, resolvedMovieId }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [msgs, conversationId, resolvedMovieId])
+  }, [mode, msgs, conversationId, resolvedMovieId])
 
-  const greet = (): Msg => ({
-    role: 'assistant',
-    text: '你好，我是影灵。可以让我推荐电影、讲某部片的剧情，或在全库短评里找台词和梗。',
-  })
+  /* 切换模式：恢复该模式自己的记录/会话（当前模式的已由上面的 effect 保存） */
+  const switchMode = (m: 'rec' | 'talk') => {
+    if (m === mode) return
+    const s = loadStored(m)
+    setMode(m)
+    setMsgs(s?.msgs?.length ? s.msgs : [greetMsg()])
+    setConversationId(s?.conversationId)
+    setResolvedMovieId(s?.resolvedMovieId)
+    playedWatch.current = Boolean(initialMovieId)
+    inputRef.current?.focus()
+  }
   const push = (m: Msg) => setMsgs((prev) => [...prev, m])
   const clear = () => {
     setConversationId(undefined) // 清空时创建新会话
     setResolvedMovieId(undefined)
     playedWatch.current = false  // 清空后允许重新播放陪看开场
-    setMsgs(movieId ? [] : [greet()])
+    setMsgs(movieId ? [] : [greetMsg()])
     inputRef.current?.focus()
   }
 
@@ -140,13 +157,7 @@ export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }
     await feedback(id, kind).catch(() => {})
   }
 
-  useEffect(() => {
-    /* 陪看场景不发通用问候，等开场动画后由开场话题接管 */
-    if (!msgs.length && !movieId) {
-      push(greet())
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  /* 欢迎语已并入 msgs 初始状态（见上），无需挂载时再 push —— 避免开发模式双挂载出现两条 */
 
   /* 开场动画结束 → AI 主动开启话题（LLM 生成，后端已带模板兑底） */
   const openWatch = async () => {
@@ -191,8 +202,8 @@ export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }
           <p className="chat-sub">推荐 · 陪看讨论 · 找评论 —— AI 只改表述，口碑忠于真实短评</p>
           <div className="chat-toolbar">
             <div className="chat-modes">
-              <button className={`chat-mode ${mode === 'rec' ? 'on' : ''}`} onClick={() => { setMode('rec'); clear() }}>推荐选片</button>
-              <button className={`chat-mode ${mode === 'talk' ? 'on' : ''}`} onClick={() => { setMode('talk'); clear() }}>陪看讨论</button>
+              <button className={`chat-mode ${mode === 'rec' ? 'on' : ''}`} onClick={() => switchMode('rec')} disabled={busy} title={busy ? '影灵回复中…' : undefined}>推荐选片</button>
+              <button className={`chat-mode ${mode === 'talk' ? 'on' : ''}`} onClick={() => switchMode('talk')} disabled={busy} title={busy ? '影灵回复中…' : undefined}>陪看讨论</button>
             </div>
             <button className={`chat-spoiler ${spoiler ? 'off' : ''}`} onClick={toggleSpoiler}>
               {spoiler ? '🛡️ 无剧透已开' : '无剧透关闭'}

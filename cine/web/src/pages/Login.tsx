@@ -19,14 +19,14 @@ export default function Login() {
   /* 卸载时清理验证码倒计时，避免泄漏的 setState */
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  const tip = (s: string) => { setToast(s); setTimeout(() => setToast(''), 3200) }
+  const tip = (s: string, ms = 3200) => { setToast(s); setTimeout(() => setToast(''), ms) }
 
   const sendCode = async () => {
     if (!/^1\d{10}$/.test(phone)) { tip('手机号格式不对'); return }
     setBusy(true)
     try {
       const r = await sms(phone)
-      tip(r.message)
+      tip(r.message, 12000)  // 验证码提示展示久一点，避免没看清就消失
       setCountdown(60)
       if (timerRef.current) clearInterval(timerRef.current)
       timerRef.current = setInterval(() => setCountdown((c) => { if (c <= 1) { if (timerRef.current) clearInterval(timerRef.current); return 0 } return c - 1 }), 1000)
