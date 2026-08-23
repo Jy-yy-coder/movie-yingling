@@ -15,7 +15,7 @@ export default function Profile() {
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.45 }}>
       <div className="profile glass-strong">
-        <a className="nav-close" href="#/" aria-label="关闭">✕</a>
+        <a className="nav-close" href="#/explore?tab=me" aria-label="关闭">✕</a>
         <h2 className="profile-title title-gold">探索档案</h2>
 
         {err && <div className="profile-err">{err}</div>}

@@ -1601,6 +1601,8 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .theme-day .account-guest-banner:hover { border-color: rgba(138, 90, 24, 0.55); }
 .theme-day .set-row { border-top-color: rgba(138, 90, 24, 0.16); }
 .theme-day .set-lab { color: var(--day-ink); }
+.theme-day .set-link { color: var(--day-main); }
+.theme-day .set-link:hover { color: var(--day-main-deep); }
 .theme-day .switch { background: rgba(138, 90, 24, 0.16); border-color: rgba(138, 90, 24, 0.3); }
 .theme-day .switch::after { background: #fffdf8; }
 .theme-day .switch.on { background: var(--day-main); border-color: var(--day-main); }

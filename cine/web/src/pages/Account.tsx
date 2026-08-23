@@ -135,20 +135,8 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
                 )}
               </div>
               <div className="set-row">
-                <span className="set-lab">关于影灵</span>
-                <a className="set-link" href="#/about">数据口径与原则 →</a>
-              </div>
-              <div className="set-row">
                 <span className="set-lab">探索档案</span>
                 <a className="set-link" href="#/profile">等级 / 徽章 →</a>
-              </div>
-              <div className="set-row">
-                <span className="set-lab">登录状态</span>
-                {data.is_guest ? (
-                  <a className="set-link" href="#/login">去登录 / 注册 →</a>
-                ) : (
-                  <button className="set-danger" onClick={() => { logout(); location.hash = '#/' }}>退出登录</button>
-                )}
               </div>
             </div>
           </>
