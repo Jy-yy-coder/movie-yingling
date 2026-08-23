@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { account, cnTitle, logout } from '../api'
+import { account, cnTitle } from '../api'
 import { regionLabel } from '../regions'
 import type { AccountData } from '../types'
 
