@@ -32,6 +32,28 @@ export default function Detail({ id }: { id: string }) {
     return () => { alive = false; clearTimeout(slowTimer) }
   }, [id])
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        location.hash = backHref
+        return
+      }
+      if (/^[1-9]$/.test(e.key)) {
+        const sm = m?.similar?.[Number(e.key) - 1]
+        if (sm?.movie_id) {
+          e.preventDefault()
+          location.hash = '#/movie/' + sm.movie_id
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [backHref, m])
+
   if (err) return <div className="overlay"><div className="detail-empty">{err}</div></div>
   if (!m) return (
     <div className="overlay detail-loading">
@@ -218,11 +240,15 @@ export default function Detail({ id }: { id: string }) {
           {/* 邻近星球 */}
           {m.similar && m.similar.length > 0 && (
             <div className="detail-block">
-              <div className="detail-block-title">相似电影</div>
+              <div className="detail-block-title">相似电影 <span className="sim-kbd">1–{Math.min(9, m.similar.length)} 切换 · Esc 关闭</span></div>
               <div className="sim-grid">
-                {m.similar.map((sm) => (
+                {m.similar.map((sm, i) => (
                   <a className="sim" href={`#/movie/${sm.movie_id}`} key={sm.movie_id}>
-                    <span className="sim-poster">{sm.poster_thumb ? <img src={sm.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(sm.title)}</i>}<em className="t-mono">{sm.rating}</em></span>
+                    <span className="sim-poster">
+                      {sm.poster_thumb ? <img src={sm.poster_thumb} alt="" loading="lazy" /> : <i>{cnTitle(sm.title)}</i>}
+                      {i < 9 && <b className="sim-num t-mono">{i + 1}</b>}
+                      <em className="t-mono">{sm.rating}</em>
+                    </span>
                     <span className="sim-title">{cnTitle(sm.title)}</span>
                   </a>
                 ))}

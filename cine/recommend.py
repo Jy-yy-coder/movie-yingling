@@ -84,7 +84,7 @@ def parse_hint(text: str):
     支持否定条件（不要X/别X/除了X）：X 进入 exclude_genres / exclude_regions，
     且不作为正向条件参与筛选。"""
     hint = {"dim": None, "genre": None, "region": None, "year_min": None,
-            "exclude_genres": [], "exclude_regions": []}
+            "runtime_max": None, "exclude_genres": [], "exclude_regions": []}
     for pat, dim, _ in _KEYMAP:
         if pat.search(text):
             hint["dim"] = dim
@@ -113,18 +113,28 @@ def parse_hint(text: str):
                 hint["region"] = hint["region"] or rg
     for num in re.findall(r"(?:19|20)\d{2}", text):
         hint["year_min"] = int(num) if not hint["year_min"] else min(hint["year_min"], int(num))
+    # 片长：「轻松两小时 / 90分钟内 / 今晚能看完」当真去卡片长，不只当心情词
+    rm = None
+    if re.search(r"90\s*分钟|九十分钟|一个半小时|一个半钟头", text):
+        rm = 90
+    if re.search(r"两小时|2\s*小时|120\s*分钟|今晚能看完|今晚看完", text):
+        rm = 120 if rm is None else min(rm, 120)
+    if re.search(r"片长少|更短|短一点|短一些", text):
+        rm = 100 if rm is None else min(rm, 100)
+    hint["runtime_max"] = rm
     return hint
 
 
 def recommend(text: str = "", region=None, genre=None, dim=None, limit=9,
-              exclude_genres=None, exclude_regions=None):
-    """规则推荐：按 DNA 顶维/地区/类型过滤后取 DNA 均值最高。text 优先做意图解析。
+              exclude_genres=None, exclude_regions=None, runtime_max=None):
+    """规则推荐：按 DNA 顶维/地区/类型/片长过滤后排序。text 优先做意图解析。
     否定条件（不要X）从候选池中剔除对应类型/地区。"""
     if text:
         h = parse_hint(text)
         region = region or h["region"]
         genre = genre or h["genre"]
         dim = dim or h["dim"]
+        runtime_max = runtime_max or h.get("runtime_max")
         exclude_genres = list(exclude_genres or []) + list(h["exclude_genres"])
         exclude_regions = list(exclude_regions or []) + list(h["exclude_regions"])
     pool = []
@@ -137,6 +147,9 @@ def recommend(text: str = "", region=None, genre=None, dim=None, limit=9,
             continue
         if exclude_regions and any(region_match(m["region"], r, m.get("countries"))
                                    for r in exclude_regions):
+            continue
+        rt = m.get("runtime_min") or 0
+        if runtime_max and rt and rt > runtime_max:
             continue
         d = m["dna"]
         if dim and d.get(dim, 0) < 7.5:

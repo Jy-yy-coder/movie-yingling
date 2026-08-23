@@ -22,6 +22,11 @@ const DECADES: { label: string; min: string; max: string }[] = [
   { label: '1990s', min: '1990', max: '1999' },
   { label: '更早', min: '', max: '1989' },
 ]
+const RUNTIMES: { label: string; max: string }[] = [
+  { label: '全部', max: '' },
+  { label: '90分钟内', max: '90' },
+  { label: '两小时内', max: '120' },
+]
 
 function readQuery(): Record<string, string> {
   const out: Record<string, string> = {}
@@ -48,6 +53,7 @@ export function ListPanel({ q, setParam, embed = false }: {
       region: q.region || '', genre: q.genre || '', sort: q.sort || 'dna',
       q: q.q || '', page: Number(q.page) || 1, limit: PAGE,
       year_min: q.year_min || '', year_max: q.year_max || '',
+      runtime_max: q.runtime_max || '',
     }).then((d) => { setData(d); setErr('') })
       .catch((e) => setErr((e as Error).message))
       .finally(() => setLoading(false))
@@ -101,6 +107,13 @@ export function ListPanel({ q, setParam, embed = false }: {
                     onClick={() => setParam({ year_min: d.min, year_max: d.max })}>{d.label}</button>
                 )
               })}
+            </div>
+            <div className="list-filter-row">
+              <span className="list-f-lab">片长</span>
+              {RUNTIMES.map((d) => (
+                <button key={d.label} className={`chip-mini ${(q.runtime_max || '') === d.max ? 'on' : ''}`}
+                  onClick={() => setParam({ runtime_max: d.max })}>{d.label}</button>
+              ))}
             </div>
             <div className="list-filter-row">
               <span className="list-f-lab">排序</span>

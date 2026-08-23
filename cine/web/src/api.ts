@@ -43,6 +43,21 @@ export const chat = (
     movie_id: movieId
   })
 
+export const chatPreview = (
+  message: string,
+  mode: 'rec' | 'talk' = 'rec',
+  spoiler = true,
+  conversationId?: number
+) =>
+  post<ChatReply>('/api/chat/preview', {
+    message,
+    device_id: deviceId(),
+    token: token(),
+    mode,
+    spoiler,
+    conversation_id: conversationId,
+  })
+
 /* ---------- 设备 & 登录态 ---------- */
 export const deviceId = () => {
   let d = localStorage.getItem('cine_device')
@@ -84,7 +99,7 @@ export const unfavorite = async (movieId: string) => {
 }
 
 /* ---------- 行为反馈（B4：收藏/浏览/点卡/换片 → 隐式画像） ---------- */
-export const feedback = async (movieId: string, kind: 'fav' | 'unfav' | 'view' | 'pick') => {
+export const feedback = async (movieId: string, kind: 'fav' | 'unfav' | 'view' | 'pick' | 'seen' | 'pass') => {
   await retryOn401((t) => post<{ ok: boolean }>(`/api/feedback?token=${encodeURIComponent(t)}`, { movie_id: movieId, kind }))
 }
 

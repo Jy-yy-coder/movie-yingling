@@ -76,6 +76,29 @@ class TestTitleAndSpoiler(unittest.TestCase):
         titles = [m["title"] for m in rec_mod.recommend("推荐一部催泪的日本动画", limit=4)]
         self.assertTrue(any("千与千寻" in t or "龙猫" in t for t in titles))
 
+    def test_two_hour_runtime_hint(self):
+        h = rec_mod.parse_hint("想轻松两小时，来点搞笑的")
+        self.assertEqual(h["runtime_max"], 120)
+        self.assertEqual(h["genre"], "喜剧")
+        for m in rec_mod.recommend("想轻松两小时，来点搞笑的", limit=6):
+            rt = m.get("runtime_min") or 0
+            if rt:
+                self.assertLessEqual(rt, 120, m["title"])
+
+    def test_soft_spoiler_guard(self):
+        leak = "安迪的结局简直让人泪目，充满了希望和奇迹。"
+        blocked = chat_mod._guard_spoilers(leak, True)
+        self.assertNotIn("希望和奇迹", blocked)
+        self.assertIn("无剧透", blocked)
+        self.assertEqual(chat_mod._guard_spoilers(leak, False), leak)
+
+    def test_preview_skips_llm(self):
+        r = chat_mod.build_reply("推荐一部燃的科幻片", spoiler=True, polish=False)
+        self.assertEqual(r["kind"], "recommend")
+        self.assertTrue(r.get("preview"))
+        self.assertGreaterEqual(len(r.get("movies") or []), 1)
+        self.assertIn("理由马上到", r.get("text") or "")
+
 
 class TestAuthMerge(unittest.TestCase):
     @classmethod

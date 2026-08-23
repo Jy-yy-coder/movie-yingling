@@ -126,12 +126,13 @@ function LibStateBridge({ params }: { params: Record<string, string> }) {
   const [q, setQ] = useState<Record<string, string>>(() => ({
     region: params.region || '', genre: params.genre || '', sort: params.sort || '', q: params.q || '', page: params.page || '',
     year_min: params.year_min || '', year_max: params.year_max || '',
+    runtime_max: params.runtime_max || '',
   }))
   /* 外部深链变化（首页心情/搜索跳转）时重置内部状态 */
-  const key = [params.region, params.genre, params.sort, params.q, params.year_min, params.year_max].join('|')
+  const key = [params.region, params.genre, params.sort, params.q, params.year_min, params.year_max, params.runtime_max].join('|')
   useEffect(() => {
     setQ({ region: params.region || '', genre: params.genre || '', sort: params.sort || '', q: params.q || '', page: '',
-      year_min: params.year_min || '', year_max: params.year_max || '' })
+      year_min: params.year_min || '', year_max: params.year_max || '', runtime_max: params.runtime_max || '' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
   const setParam = (patch: Record<string, string>) => {
