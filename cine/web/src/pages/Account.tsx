@@ -144,7 +144,11 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
               </div>
               <div className="set-row">
                 <span className="set-lab">登录状态</span>
-                <button className="set-danger" onClick={() => { logout(); location.hash = '#/' }}>退出登录</button>
+                {data.is_guest ? (
+                  <a className="set-link" href="#/login">去登录 / 注册 →</a>
+                ) : (
+                  <button className="set-danger" onClick={() => { logout(); location.hash = '#/' }}>退出登录</button>
+                )}
               </div>
             </div>
           </>

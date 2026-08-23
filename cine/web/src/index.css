@@ -267,6 +267,17 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .page-back-t:hover { transform: translateY(-3px); }
 .page-back-b { left: 50%; bottom: 20px; translate: -50% 0; }
 .page-back-b:hover { transform: translateY(3px); }
+
+.nav-close {
+  position: fixed; top: 16px; right: 18px; z-index: 52;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; color: var(--color-dust-300);
+  background: rgba(13, 17, 32, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: var(--ease-ui);
+}
+.nav-close:hover { color: var(--color-gold-300); border-color: rgba(240, 217, 160, 0.4); }
 .tag {
   display: inline-block; font-size: 12px; padding: 3px 10px; border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12); color: var(--color-dust-300); background: rgba(255, 255, 255, 0.04);
@@ -316,14 +327,15 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .detail { max-width: 1080px; margin: 0 auto; padding: 26px 26px 60px; }
 .detail-empty, .detail-loading { text-align: center; padding: 60px; color: var(--color-dust-500); font-family: var(--font-display); font-size: 16px; }
 /* 详情数据未到：镜头推进中（全屏居中提示，保持原有进入效果） */
-.overlay.detail-loading { display: flex; align-items: center; justify-content: center; padding: 0; }
+.overlay.detail-loading { display: flex; align-items: center; justify-content: center; padding: 0; background: radial-gradient(85% 65% at 50% 38%, rgba(11, 15, 29, 0.45) 0%, rgba(7, 9, 18, 0.28) 58%, rgba(4, 5, 10, 0.16) 100%); }
 .detail-loading-inner { font-size: 17px; letter-spacing: 3px; animation: floaty 1.6s ease-in-out infinite; }
+.detail-fav-err { margin-top: 8px; font-size: 12px; color: var(--color-warn); letter-spacing: 1px; }
 /* 详情数据未到：透明占位，不遮挡镜头推进动画 */
 .detail-loading-blank { background: transparent; pointer-events: none; }
 .detail-head { display: grid; grid-template-columns: 300px 1fr; gap: 34px; align-items: start; }
 .detail-poster { position: relative; }
 .detail-poster-glow {
-  position: absolute; inset: -12px; border-radius: 18px; z-index: 0;
+  position: absolute; inset: -12px; border-radius: 18px; z-index: 0; pointer-events: none;
   background: radial-gradient(60% 60% at 50% 50%, rgba(240, 217, 160, 0.16), transparent 70%);
   filter: blur(8px);
 }
@@ -898,7 +910,17 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   padding: 58px clamp(20px, 6vw, 60px) 26px;
 }
 .chat > * { width: min(900px, 100%); }
-.chat-head { flex: none; padding-right: 148px; }
+.chat-head { flex: none; position: relative; min-height: 40px; padding-right: 132px; }
+.chat-back {
+  position: absolute; right: 0; top: 0; z-index: 2;
+  font-size: 12px; letter-spacing: 2px; padding: 8px 16px; border-radius: var(--r-pill);
+  min-height: 40px; display: inline-flex; align-items: center;
+  color: var(--color-dust-300);
+  background: rgba(13, 17, 32, 0.72); border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  transition: var(--ease-ui);
+}
+.chat-back:hover { color: var(--color-gold-300); border-color: rgba(240, 217, 160, 0.4); }
 .chat-title { font-size: 24px; letter-spacing: 3px; }
 .chat-sub { font-size: 12px; color: var(--color-dust-500); margin-top: 5px; letter-spacing: 1px; }
 .chat-toolbar { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
@@ -1657,7 +1679,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 @media (max-width: 860px) {
   .hud-side { display: none; }
   .hud-guide {
-    right: 12px; left: 12px; bottom: 78px; z-index: 43;
+    right: 12px; left: 12px; bottom: 88px; z-index: 41;
     justify-content: center;
   }
   .hud-guide-arrow { display: none; }
@@ -1665,8 +1687,9 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   .hud-guide-txt b { font-size: 12px; }
   .hud-guide-txt span { font-size: 10.5px; letter-spacing: 0.5px; }
   .navi { padding: 22px 18px; }
-  .chat { padding: 72px 16px 22px; }
-  .chat-head { padding-right: 0; }
+  .chat { padding: 22px 16px 22px; }
+  .chat-head { padding-right: 0; padding-top: 48px; }
+  .chat-back { top: 0; }
   .list { padding: 60px 18px 46px; }
   .explore-nav { gap: 10px; }
   .explore-logo { display: none; }

@@ -4,7 +4,7 @@ import { cnTitle, DNA_DIMS, movies } from '../api'
 import { regionLabel } from '../regions'
 import type { Movie } from '../types'
 
-/* 列表页 #/list：地区 / 类型 / 年份 / 评分 / DNA 排序筛选 + 分页 */
+/* 列表页 #/list：地区 / 类型 / 年代 / 评分 / DNA 排序筛选 + 分页 */
 
 const REGIONS = ['中国', '日本', '韩国', '欧洲', '美国', '其他']
 const GENRES = ['剧情', '喜剧', '动作', '爱情', '科幻', '犯罪', '悬疑', '动画', '奇幻', '家庭', '战争', '恐怖']
@@ -14,6 +14,14 @@ const SORTS = [
   ...DNA_DIMS.map((d) => ({ key: d, label: d })),
 ]
 const PAGE = 24
+const DECADES: { label: string; min: string; max: string }[] = [
+  { label: '全部', min: '', max: '' },
+  { label: '2020s', min: '2020', max: '2029' },
+  { label: '2010s', min: '2010', max: '2019' },
+  { label: '2000s', min: '2000', max: '2009' },
+  { label: '1990s', min: '1990', max: '1999' },
+  { label: '更早', min: '', max: '1989' },
+]
 
 function readQuery(): Record<string, string> {
   const out: Record<string, string> = {}
@@ -39,6 +47,7 @@ export function ListPanel({ q, setParam, embed = false }: {
     movies({
       region: q.region || '', genre: q.genre || '', sort: q.sort || 'dna',
       q: q.q || '', page: Number(q.page) || 1, limit: PAGE,
+      year_min: q.year_min || '', year_max: q.year_max || '',
     }).then((d) => { setData(d); setErr('') })
       .catch((e) => setErr((e as Error).message))
       .finally(() => setLoading(false))
@@ -82,6 +91,16 @@ export function ListPanel({ q, setParam, embed = false }: {
               {GENRES.map((g) => (
                 <button key={g} className={`chip-mini ${genre === g ? 'on' : ''}`} onClick={() => setParam({ genre: g })}>{g}</button>
               ))}
+            </div>
+            <div className="list-filter-row">
+              <span className="list-f-lab">年代</span>
+              {DECADES.map((d) => {
+                const on = (q.year_min || '') === d.min && (q.year_max || '') === d.max
+                return (
+                  <button key={d.label} className={`chip-mini ${on ? 'on' : ''}`}
+                    onClick={() => setParam({ year_min: d.min, year_max: d.max })}>{d.label}</button>
+                )
+              })}
             </div>
             <div className="list-filter-row">
               <span className="list-f-lab">排序</span>
@@ -163,7 +182,12 @@ export default function List() {
     const next = { ...readQuery(), ...patch }
     if (!patch.page && next.page) delete next.page
     const qs = new URLSearchParams(next).toString()
-    history.replaceState(null, '', '#/list' + (qs ? '?' + qs : ''))
+    const hash = '#/list' + (qs ? '?' + qs : '')
+    history.replaceState(null, '', hash)
+    try {
+      sessionStorage.setItem('cine_route_hash', hash)
+      sessionStorage.setItem('cine_route_path', '/list')
+    } catch { /* ignore */ }
   }
 
   return (

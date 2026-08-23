@@ -9,14 +9,19 @@ export default function Detail({ id }: { id: string }) {
   const [m, setM] = useState<Movie | null>(null)
   const [err, setErr] = useState('')
   const [favOn, setFavOn] = useState(false)
+  const [favErr, setFavErr] = useState('')
+  const [slow, setSlow] = useState(false)
 
-  /* 返回目标：从探索/人格页进来的回到来源页，否则回银河 */
-  const from = sessionStorage.getItem('cine_detail_from') || ''
-  const backHref = from === '/explore' ? '#/explore' : from === '/personality' ? '#/personality' : from === '/list' ? '#/list' : '#/'
+  /* 返回目标：记住完整 hash（含探索 tab/搜索），避免关详情丢筛选 */
+  const from = sessionStorage.getItem('cine_detail_from') || '#/'
+  const backHref = from.startsWith('#/') && !from.startsWith('#/movie') ? from : '#/'
 
   useEffect(() => {
     setM(null)
     setErr('')
+    setFavErr('')
+    setSlow(false)
+    const slowTimer = setTimeout(() => setSlow(true), 480)
     movie(id).then((d) => { setM(d) }).catch((e) => setErr(e.message))
     let alive = true
     explorer().then((d) => {
@@ -24,12 +29,15 @@ export default function Detail({ id }: { id: string }) {
     }).catch(() => { /* 收藏态非关键 */ })
     // B4：浏览行为信号（进入详情页即记录，供隐式画像）
     void feedback(id, 'view').catch(() => { /* 行为信号非关键 */ })
-    return () => { alive = false }
+    return () => { alive = false; clearTimeout(slowTimer) }
   }, [id])
 
   if (err) return <div className="overlay"><div className="detail-empty">{err}</div></div>
-  /* 数据未到：透明占位，不遮挡镜头推进动画，也不单独显示提示文字 */
-  if (!m) return <div className="overlay detail-loading-blank" />
+  if (!m) return (
+    <div className="overlay detail-loading">
+      {slow ? <div className="detail-loading-inner">正在打开电影空间…</div> : null}
+    </div>
+  )
 
   const [cn, ...rest] = (m.title || '').split(/\s+/)
   const orig = rest.join(' ')
@@ -44,7 +52,10 @@ export default function Detail({ id }: { id: string }) {
     try {
       if (favOn) { await unfavorite(id); setFavOn(false); void feedback(id, 'unfav').catch(() => {}) }
       else { await favorite(id); setFavOn(true); void feedback(id, 'fav').catch(() => {}) }
-    } catch { /* ignore */ }
+      setFavErr('')
+    } catch (e) {
+      setFavErr((e as Error).message || '收藏失败，请稍后重试')
+    }
   }
 
   return (
@@ -96,6 +107,7 @@ export default function Detail({ id }: { id: string }) {
                   🍿 AI 陪看
                 </a>
               </div>
+              {favErr && <div className="detail-fav-err">{favErr}</div>}
 
               <p className="detail-summary">{m.brief || m.summary}</p>
 

@@ -101,15 +101,24 @@ export default function GalaxyScene() {
   const [quiet, setQuiet] = useState(() => {
     const h = (typeof location !== 'undefined' ? location.hash : '') || '#/'
     const path = h.split('?')[0]
-    return path !== '#/' && path !== '#' && path !== ''
+    const overlay = path !== '#/' && path !== '#' && path !== ''
+    const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    return overlay || reduce
   })
   useEffect(() => {
-    const onHash = () => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => {
       const path = (location.hash || '#/').split('?')[0]
-      setQuiet(path !== '#/' && path !== '#' && path !== '')
+      const overlay = path !== '#/' && path !== '#' && path !== ''
+      setQuiet(overlay || mq.matches)
     }
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
+    mq.addEventListener('change', apply)
+    window.addEventListener('hashchange', apply)
+    apply()
+    return () => {
+      mq.removeEventListener('change', apply)
+      window.removeEventListener('hashchange', apply)
+    }
   }, [])
   return (
     <Canvas

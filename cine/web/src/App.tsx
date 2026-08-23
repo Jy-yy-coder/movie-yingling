@@ -68,13 +68,18 @@ export default function App() {
   }
 
   /* 进入详情页前记住来源页（详情页退出时回到来源，而不是一律跳回银河）
-     电影→电影（相似片）时保留最初来源，避免关闭后掉回银河 */
+     电影→电影（相似片）时保留最初来源；从陪看返回同一部片时也不要把来源改成聊天页 */
   useEffect(() => {
+    const hash = location.hash || '#/'
     if (route.path === '/movie') {
-      const now = sessionStorage.getItem('cine_route_now') || '/'
-      if (now !== '/movie') sessionStorage.setItem('cine_detail_from', now)
+      const prev = sessionStorage.getItem('cine_route_path') || '/'
+      const prevHash = sessionStorage.getItem('cine_route_hash') || '#/'
+      if (prev !== '/movie' && !(prev === '/chat' && prevHash.includes('movie_id='))) {
+        sessionStorage.setItem('cine_detail_from', prevHash)
+      }
     }
-    sessionStorage.setItem('cine_route_now', route.path)
+    sessionStorage.setItem('cine_route_path', route.path)
+    sessionStorage.setItem('cine_route_hash', hash)
   }, [route])
 
   /* 51.LA SPA 路由统计：hash 切换时手动上报页面浏览 */

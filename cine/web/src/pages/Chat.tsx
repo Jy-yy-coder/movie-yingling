@@ -31,7 +31,12 @@ const QUICK = [
 ]
 
 /* 聊天主体面板：embed 时嵌入探索模式，否则由 Chat 包成右侧滑入整屏页 */
-export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; initialMovieId?: string }) {
+export function ChatPanel({ embed = false, initialMovieId, backHref, backLabel }: {
+  embed?: boolean
+  initialMovieId?: string
+  backHref?: string
+  backLabel?: string
+}) {
   /* 携电影进入 = 陪看场景：默认 talk 模式 + 开场动画；普通会话尝试恢复上次聊天 */
   const stored = initialMovieId ? null : loadStored()
   const [mode, setMode] = useState<'rec' | 'talk'>(stored?.mode ?? (initialMovieId ? 'talk' : 'rec'))
@@ -154,6 +159,7 @@ export function ChatPanel({ embed = false, initialMovieId }: { embed?: boolean; 
         </AnimatePresence>
 
         <div className="chat-head">
+          {backHref && <a className="chat-back" href={backHref}>{backLabel || '返回 ›'}</a>}
           <h1 className="chat-title title-gold">问影灵</h1>
           <p className="chat-sub">推荐 · 陪看讨论 · 找评论 —— AI 只改表述，口碑忠于真实短评</p>
           <div className="chat-toolbar">
@@ -277,8 +283,11 @@ export default function Chat({ movieId }: { movieId?: string }) {
       initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
       transition={{ duration: 0.55, ease: [0.32, 0.72, 0.35, 1] }}
     >
-      <a className="page-back page-back-r" href="#/">返回银河 ›</a>
-      <ChatPanel initialMovieId={movieId} />
+      <ChatPanel
+        initialMovieId={movieId}
+        backHref={movieId ? `#/movie/${movieId}` : '#/'}
+        backLabel={movieId ? '‹ 返回影片' : '返回银河 ›'}
+      />
     </motion.div>
   )
 }

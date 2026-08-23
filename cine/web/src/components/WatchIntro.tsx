@@ -24,6 +24,14 @@ export default function WatchIntro({ onDone }: { onDone: () => void }) {
 
   const skip = () => onDoneRef.current()
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Enter') skip()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const phase = step < PHASES.length ? PHASES[step].key : 'title'
   return (
     <motion.div
