@@ -5,7 +5,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "excludeFiles": "{cine/web/**,cine/static/**,cine/static_legacy/**,tests/**,__pycache__/**,*.pyc,*.bak*,*.md,*.log,logs/**,_shots/**,reports/**,cookies/**,_tmp_*,data/task/**,data/posters/**,data/*.csv,*.xlsx}"
+      "excludeFiles": "{cine/web/**,cine/static/**,cine/static_legacy/**,tests/**,__pycache__/**,*.pyc,*.bak*,*.md,*.log,logs/**,_shots/**,reports/**,cookies/**,_tmp_*,data/task/**,data/posters/**,data/*.csv,*.xlsx,data/enriched/movie_vectors.npz}"
     }
   },
   "rewrites": [
