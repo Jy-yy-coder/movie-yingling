@@ -1,0 +1,52 @@
+# ============ 数据文件（仅保留运行时必需） ============
+# 原始CSV数据（gitignore 已排除，补充 vercelignore）
+data/*.csv
+data/*.xlsx
+data/posters/
+data/enriched/posters_thumb/
+
+# enriched 下的数据库和向量（保留 comments_fts.db 和 movie_vectors.npz）
+data/enriched/*.db
+!data/enriched/comments_fts.db
+data/enriched/*.npz
+!data/enriched/movie_vectors.npz
+
+# 备份/临时文件
+*.bak*
+*.bak_p1
+data/enriched/*.bak_*
+data/enriched/*_v0.json
+data/enriched/llm_partial*.json
+data/enriched/core_dna*.json
+data/enriched/core_quotes*.json
+data/enriched/build_task_llm.csv
+data/enriched/_clean_stats.txt
+data/enriched/sample_cards*.md
+
+# ============ 运行时数据库（保留 cine.db 和 lookup_slim.db） ============
+# 只排除完整版 lookup.db（134MB），保留 slim 版
+cine/data/lookup.db
+cine/data/*.log
+
+# ============ 日志/截图/报告 ============
+_tmp_*
+_shots/
+logs/
+reports/
+
+# ============ 开发工具 ============
+.claude/
+.playwright-mcp/
+.zcode/
+.vercel
+.env*
+!.env.example
+
+# ============ Node / Python 依赖 ============
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+*.egg
