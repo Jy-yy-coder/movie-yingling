@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { account, cnTitle } from '../api'
+import { account, cnTitle, logout } from '../api'
 import { regionLabel } from '../regions'
 import type { AccountData } from '../types'
 
@@ -34,6 +34,20 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
   }
 
   const [confirming, setConfirming] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
+
+  /* 退出登录：清 token 与本地凭据，回到游客态并刷新面板数据 */
+  const doLogout = async () => {
+    setLoggingOut(true)
+    logout()
+    try {
+      setData(await account())
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setLoggingOut(false)
+    }
+  }
 
   const clearLocal = () => {
     Object.keys(localStorage).filter((k) => k.startsWith('cine_')).forEach((k) => localStorage.removeItem(k))
@@ -137,6 +151,43 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
               <div className="set-row">
                 <span className="set-lab">探索档案</span>
                 <a className="set-link" href="#/profile">等级 / 徽章 →</a>
+              </div>
+            </div>
+
+            {/* ---------- 账号与安全 ---------- */}
+            <div className="account-section">
+              <div className="account-section-title">账号与安全</div>
+              <div className="acct-status">
+                <span className={`acct-dot ${data.is_guest ? 'guest' : 'online'}`} />
+                <span className="acct-label">{data.is_guest ? '游客模式' : '已登录'}</span>
+                {!data.is_guest && (
+                  <>
+                    <span className="acct-sep">·</span>
+                    <span className="acct-phone t-mono">{maskName(data)}</span>
+                    <span className="acct-sep">·</span>
+                    <span className="acct-sync">云端同步中</span>
+                  </>
+                )}
+                {data.is_guest && (
+                  <>
+                    <span className="acct-sep">·</span>
+                    <span className="acct-sync acct-sync-local">数据仅本机</span>
+                  </>
+                )}
+              </div>
+              {!data.is_guest && (
+                <div className="acct-detail t-mono">
+                  注册于 {data.created_at || '—'} · 设备 ID {data.device_id ? data.device_id.slice(0, 8) + '…' : '—'}
+                </div>
+              )}
+              <div className="acct-actions">
+                {data.is_guest ? (
+                  <a className="set-link" href="#/login">去登录 / 注册 →</a>
+                ) : loggingOut ? (
+                  <span className="acct-logging-out">正在退出…</span>
+                ) : (
+                  <button className="set-danger" type="button" onClick={doLogout}>退出登录</button>
+                )}
               </div>
             </div>
           </>
