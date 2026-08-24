@@ -1197,7 +1197,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
 .account-guest-banner:hover { border-color: rgba(240, 217, 160, 0.45); }
 
 /* ---- 游客模式：独立询问页 ---- */
-.guest {
+.guest-panel {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(460px, calc(100vw - 40px)); border-radius: var(--r-xl); padding: 38px 36px; text-align: center;
 }
@@ -1276,7 +1276,7 @@ h1, h2, .title-gold, .exp-hi { text-wrap: balance; }
   background: #4ade80; box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
 }
 .acct-dot.guest {
-  background: var(--color-gold-400); box-shadow: 0 0 6px rgba(var(--gold-rgb), 0.35);
+  position: static; width: 8px; height: 8px; background: var(--color-gold-400); box-shadow: 0 0 6px rgba(var(--gold-rgb), 0.35);
 }
 .acct-label {
   font-size: 14px; color: var(--color-dust-100); font-weight: 500; letter-spacing: 1px;

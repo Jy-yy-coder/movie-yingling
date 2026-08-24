@@ -6,7 +6,7 @@ import { motion } from 'framer-motion'
 export default function Guest() {
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.45 }}>
-      <div className="guest glass-strong">
+      <div className="guest-panel glass-strong">
         <a className="nav-close" href="#/explore?tab=me" aria-label="关闭">✕</a>
         <div className="guest-ava">🌌</div>
         <h2 className="guest-title title-gold">要让影灵记住你吗？</h2>
