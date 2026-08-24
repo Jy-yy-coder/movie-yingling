@@ -80,7 +80,7 @@ export function AccountPanel({ embed = false }: { embed?: boolean }) {
               </div>
               <div className="account-ring-wrap">
                 <div className="account-ring" data-pct={`${pct}%`}
-                  style={{ background: `conic-gradient(var(--color-gold-300) ${pct}%, rgba(255,255,255,0.07) 0)` }} />
+                  style={{ background: pct > 0 ? `conic-gradient(var(--color-gold-300) ${pct}%, rgba(255,255,255,0.07) 0)` : 'none' }} />
                 档案完成度
               </div>
             </div>
