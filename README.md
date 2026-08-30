@@ -1,241 +1,58 @@
-# 影灵 CINE · 电影宇宙
+# 影灵 CINE
 
-> 数可视 AI 应用赛道参赛作品
+浏览链接：https://movie-yingling.vercel.app/
 
-一个以"电影银河"为核心可视化的 AI 电影推荐平台。590 部高分电影构成 5000 颗星球，AI 导航员「影灵」陪你选片、聊片、陪看。
+一、作品简介
+影灵CINE是一款以真实电影数据为基础、融合数据可视化与大语言模型的AI电影推荐应用。应用关注到用户在日常观影过程中真实存在的诸多痛点，如面对海量影片时不知道从何选起、传统推荐结果同质化严重，通用AI的回答也可能缺乏可靠的数据依据。影灵希望通过AI让繁琐低效的观影筛选变得简单高效，让冰冷的数据匹配变得更加贴近真实需求。应用将AI引入选片—观影—聊片的完整过程，以优质电影数据和十几万条真实影评为基础，让每一次推荐有据可依，为用户提供从电影选择、观影辅助到观后讨论的一体化创新体验。
+<img width="865" height="471" alt="image" src="https://github.com/user-attachments/assets/f343fd09-36e2-4bee-a0e6-d11e1297b685" />
 
-## 核心功能
+二、核心功能
+AI推荐选片：在选片方式上，除了按类型、评分、年份等筛选影片的传统模式，影灵还加入了AI问答推荐。用户只需要用自然语言表达观影需求，无论是当下的心情、所处场景还是观影人群，影灵都能读懂用户的需求，检索数据库、推荐影片并提供它推荐这部影片的原因。真实是影灵坚守的底线，它拥有严格的内容核验机制，每一条推荐理由、每一个口碑解读，都源自电影的详细数据与十几万条真实的影评，层层筛选、精准匹配，保证每一次推荐都真实可信。
+<img width="865" height="473" alt="image" src="https://github.com/user-attachments/assets/eebcb103-0125-49be-9313-ed1417265548" />
+<img width="865" height="473" alt="image" src="https://github.com/user-attachments/assets/d593ecb3-b42f-4ba1-ad65-e1b4f812f5dd" />
 
-- **电影银河**：590 部核心电影 + 4410 部库外精选，构成可交互的 3D 电影宇宙（Three.js + React Three Fiber）
-- **AI 问影灵**：自然语言推荐电影，支持多轮对话、无剧透模式、推荐解释
-- **AI 陪看**：选片后进入陪看模式，AI 主动破冰、聊剧情、讨论观点
-- **电影人格测试**：五维 DNA 人格画像，生成个性化探索路线
-- **口碑 DNA 罗盘**：剧情 / 演技 / 情感 / 视听 / 节奏五维可视化
-- **观众情绪宇宙**：基于真实评论的情绪温度 / 好评差评分析
-- **探索档案**：收藏等级、徽章系统、观影足迹
-- **离线降级**：LLM 不可用时自动降级为规则推荐，核心功能不受影响
+AI陪看功能：用户选好心仪影片后，影灵就能开启专属陪看模式。如果害怕剧透，影灵的默认模式只会聊聊影片的整体氛围、画面质感、观影小建议，不涉及核心剧情和结局，让用户能放心地提前了解影片，完全保留观影的惊喜感；等完整看完影片后，可以一键切换深度讨论模式，和AI自由探讨影片细节、人物设定、剧情伏笔和深层立意，沉浸式解锁影片的全部魅力。
+<img width="865" height="471" alt="image" src="https://github.com/user-attachments/assets/712916fc-f58c-4069-b755-529fa0e3cd6f" />
 
-## 技术栈
+电影人格画像：为了让推荐能够精准适配用户的独特性，我们设计了专属的个人观影人格体系。只需完成12道轻松有趣的情景小题目，就能生成专属用户独一无二的观影人格档案。影灵会默默记住用户的观影偏好、喜欢的影片风格以及日常观影场景等，持续迭代优化推荐内容，摆脱千人一面的通用推送。
+<img width="865" height="479" alt="image" src="https://github.com/user-attachments/assets/b6c4e5be-f271-4b5b-bd95-30535c1ef7c7" />
+<img width="865" height="740" alt="image" src="https://github.com/user-attachments/assets/7e4eb7ab-afd4-4ae0-932f-4106624fb1d1" />
+<img width="865" height="819" alt="image" src="https://github.com/user-attachments/assets/7308f1e5-4d9a-4d30-8a0d-4dd96b4d340d" />
 
-| 层 | 技术 |
-|---|---|
-| 前端 | React 19 + TypeScript + Vite 8 + Tailwind CSS 4 |
-| 3D 可视化 | Three.js + React Three Fiber + Drei + Postprocessing |
-| 图表 | ECharts 6 |
-| 状态管理 | Zustand 5 |
-| 动画 | Framer Motion 13 |
-| 后端 | Python FastAPI + SQLite |
-| AI | OpenAI 兼容 API（SenseNova）+ 本地向量检索（bge-small-zh） |
-| 数据 | 590 部核心 + 11.7 万条评论 + 23 万部检索库 |
+数据可视化：影灵把抽象的“高分评价”变得直观又易懂，将每一部影片拆解为剧情、演技、情感、视听、节奏五大核心维度，同时标注影片整体情绪氛围，用通俗的话语搭配直观的可视化图谱，清晰拆解影片的优劣特点和风格调性。让用户能一眼看懂影片的真实水准，精准匹配自己的观影期待。
+<img width="865" height="513" alt="image" src="https://github.com/user-attachments/assets/de0a0211-720a-4f70-8202-a52e52fbf80f" />
 
-## 项目结构
+用户使用体验：影灵充分考虑使用场景的稳定性，就算遇到断网、网络卡顿等特殊情况，应用也能正常提供规则推荐，不会中断核心观影体验，让用户随时随地都能安心使用。
 
-```
-movie/
-├── cine/                    # 后端 + 前端
-│   ├── main.py              # FastAPI 入口（API + 静态托管）
-│   ├── data.py              # 数据加载层
-│   ├── chat.py              # 聊天意图 + 离线降级
-│   ├── llm.py               # LLM 封装（模型链，失败降级）
-│   ├── recommend.py         # DNA / 相似片规则推荐
-│   ├── search.py            # FTS 检索 + 标题解析
-│   ├── embed.py             # 向量语义检索
-│   ├── personality.py       # 电影人格测试
-│   ├── web/                 # React 前端源码
-│   │   ├── src/             # 页面 + 组件 + 3D 场景
-│   │   ├── package.json
-│   │   └── vite.config.ts
-│   └── data/                # 运行时数据（cine.db / lookup.db）
-├── data/                    # 静态数据
-│   ├── enriched/            # 核心数据（JSON / DB / 向量）
-│   │   ├── movies_core.json # 590 部核心电影
-│   │   ├── similarity.json  # 相似片关系
-│   │   ├── sentiment.json   # 情绪分析
-│   │   └── posters_thumb/   # 缩略图海报
-│   ├── posters/             # 全尺寸海报
-│   └── *.csv                # 原始数据（爬虫产物）
-└── requirements.txt         # Python 依赖
-```
+三、技术框架
+影灵采用前后端分离 + 轻量Serverless部署的整体架构，以“数据真实、推荐可信、体验流畅”为设计原则，构建了一套从数据采集、智能处理到前端呈现的完整技术链路。
+<img width="865" height="487" alt="image" src="https://github.com/user-attachments/assets/b0d5a2fb-8012-4043-885a-79e63cb9c23c" />
 
-## 快速开始
+前端层：基于 React 19 + TypeScript 构建，使用 Three.js（React Three Fiber）实现电影银河的3D可视化渲染，Framer Motion 驱动页面转场与微交互，Tailwind CSS 负责响应式样式，Zustand 管理全局状态。整体前端打包为静态产物，通过 CDN 分发，保证首屏加载速度。
+<img width="865" height="473" alt="image" src="https://github.com/user-attachments/assets/08c8489f-5225-4fdc-86dc-ec4aad7d4a3c" />
 
-### 1. 克隆项目
+后端层：基于 Python FastAPI 构建 RESTful API 服务，采用 SQLite 作为核心存储引擎（WAL 模式保障并发读性能），部署于 Vercel Serverless 平台。启动时一次性加载核心数据资产到内存，所有 API 请求直接命中内存数据，响应延迟极低。后端内置滑动窗口限流、多身份（登录/游客）统一链路、行为反馈隐式画像等机制，兼顾安全性与个性化。
 
-```bash
-git clone https://github.com/<your-username>/cine.git
-cd cine
-```
+数据层：
+核心电影库：每部影片包含五维DNA评分（剧情/演技/情感/视听/节奏）、情绪温度、好评金句、差评预警、真实短评等结构化数据，全部经过人工核验与LLM辅助清洗；
+库外轻索引：覆盖豆瓣评分6.0以上的海量影片基础信息，保障用户搜索不碰壁；
+短评全文索引：基于 SQLite FTS5 构建全文检索，支持关键词精准命中短评内容；
+语义向量库：使用 BGE 中文嵌入模型将每部影片编码为512维向量，支撑自然语言语义检索；
+相似关系图谱：基于影片多维特征计算相似关系，为"推荐类似的片"提供数据支撑；
+观众情绪分析：对每部影片的评论进行情绪温度计算，生成冷暖情绪指标，驱动银河视觉色彩映射。
 
-### 2. 安装 Python 依赖
+四、LLM应用
+<img width="865" height="433" alt="image" src="https://github.com/user-attachments/assets/767f7b96-b1fb-415f-8c47-2fb73968bfb1" />
 
-```bash
-pip install -r requirements.txt
-```
+1. 推荐选片——规则先行，LLM后润
+推荐的核心决策完全由规则引擎和向量检索完成（选出哪几部片、为什么选它们），LLM只基于已有的候选影片数据和推荐理由，用自然、温暖的语言组织成给用户看的推荐文案。系统内置了防幻觉双重校验——先检查推荐编号是否在候选范围内，再检查正文是否出现了候选清单之外的片名，确保用户看到的每一部推荐、每一条理由都来自真实数据。
 
-### 3. 构建前端
+2. AI陪看——有边界感的电影聊伴
+陪看场景是LLM发挥对话能力的核心阵地。系统为不同场景设计了5套专属提示词（推荐选片、电影问答、无剧透问答、看前导览、深度讨论），每套提示词都遵循同一铁律：事实卡片是唯一信息源。LLM收到的每条消息都附带了从数据库提取的结构化事实卡（影片DNA、评分、好评金句、差评预警等），LLM只能在此基础上组织语言，不能引入训练数据中的“记忆”。
+无剧透模式设计：在无剧透模式下，影灵会主动避免回答核心剧情的内容。应用通过明确的规则限制AI与用户讨论影片的结局、关键人物和剧情反转等，并在输出前严格检查是否含有剧透信息，以最大限度地保障用户在观影前和观影过程中的良好体验。
 
-```bash
-cd cine/web
-npm install
-npm run build
-cd ../..
-```
+3. 多轮对话——上下文感知与查询改写
+影灵的聊天不是“一问一答”的简单模式，而是具备多轮上下文理解能力。系统能够识别追问意图，自动拼接上一轮的检索条件做查询改写；以及从会话历史中提取上轮推荐的影片，对于已推荐的影片则自动排重，避免重复推荐。意图理解、影片检索、候选排序等由确定性算法完成，LLM负责传递最终表达。
 
-### 4. 配置 LLM（可选）
-
-创建环境变量或本地密钥文件：
-
-```bash
-# 方式一：环境变量（推荐）
-export CINE_LLM_API_KEY="your-api-key"
-
-# 方式二：本地密钥文件（不入库）
-echo "your-api-key" > data/task/llm_key.local.txt
-```
-
-> 无密钥时自动降级为离线规则推荐模式，核心功能不受影响。
-
-### 5. 启动服务
-
-```bash
-# 方式一：直接启动
-python -m uvicorn cine.main:app --port 8010
-
-# 方式二：使用启动脚本（Windows）
-start_server.bat
-```
-
-打开浏览器访问 **http://127.0.0.1:8010**
-
-> 首次启动会自动从 `data/movies_info_clean.csv` 构建库外电影索引（`cine/data/lookup.db`，约 10s），之后秒载。
-
-## 环境变量
-
-| 变量名 | 说明 | 必需 |
-|---|---|---|
-| `CINE_LLM_API_KEY` | LLM API Key（SenseNova / OpenAI 兼容） | 否（无则降级离线模式） |
-
-### LLM 配置文件
-
-`data/task/llm_config.json`（不入库，需自行创建）：
-
-```json
-{
-  "provider": "deepseek",
-  "base_url": "https://your-api-endpoint/v1",
-  "models": {
-    "main": "your-model-name",
-    "chat": "your-model-name"
-  }
-}
-```
-
-## 开发命令
-
-```bash
-# 前端开发（热更新，代理 API 到后端 8010）
-cd cine/web
-npm run dev         # http://localhost:5173
-
-# 后端开发
-python -m uvicorn cine.main:app --port 8010 --reload
-
-# 代码检查
-cd cine/web
-npm run lint        # oxlint
-```
-
-## 生产构建
-
-```bash
-cd cine/web
-npm run build       # TypeScript 编译 + Vite 打包到 dist/
-```
-
-构建产物位于 `cine/web/dist/`，由 FastAPI 自动托管为静态文件。
-
-## 数据说明
-
-### 已包含在仓库中
-
-| 文件 | 大小 | 说明 |
-|---|---|---|
-| `data/enriched/movies_core.json` | ~2.8 MB | 590 部核心电影完整数据 |
-| `data/enriched/similarity.json` | ~60 KB | 相似片关系 |
-| `data/enriched/sentiment.json` | ~0.9 MB | 情绪分析数据 |
-| `data/enriched/comments_fts.db` | ~81 MB | 评论全文检索数据库 |
-| `data/enriched/movie_vectors.npz` | ~1.2 MB | 语义向量数据 |
-| `cine/data/lookup_slim.db` | ~60 MB | 库外电影索引（20.8 万部，简介截断版） |
-| `cine/data/cine.db` | 48 KB | 用户库种子（空表结构） |
-| `cine/web/public/posters/` | ~100 MB | 590 张全尺寸海报（前端静态资源） |
-| `cine/web/public/posters_thumb/` | ~17 MB | 590 张缩略图海报 |
-
-### 可选（仅本地完整体验，线上部署不需要）
-
-| 文件 | 大小 | 说明 |
-|---|---|---|
-| `data/movies_info_clean.csv` | ~183 MB | 23 万部电影原始信息（用于构建完整版 lookup.db） |
-| `data/movie_comments.csv` | ~29 MB | 11.7 万条真实评论（本地预加载短评索引，带作者字段） |
-| `cine/data/lookup.db` | ~134 MB | 完整版库外索引（简介不截断，存在时优先于 slim 版） |
-
-> 缺少可选文件时，平台仍可完整运行——短评按需查 FTS 库（无作者名），库外检索用瘦身版索引。
-
-## Vercel 部署说明
-
-本项目支持 **单仓库单 Vercel 项目** 部署（前端静态 + Python Serverless API 同域）：
-
-- 前端（`cine/web`，Vite）构建为静态资源，海报随 `web/public` 一起上 CDN
-- 后端（FastAPI）通过 `api/index.py` 挂为 Serverless Function，仅处理 `/api/*`（见 `vercel.json`）
-- `cine/data/lookup_slim.db`（60MB 瘦身版库外索引）与 `data/enriched/comments_fts.db`（85MB）随仓库分发
-- 用户数据（注册/收藏/聊天记录）写入 `/tmp` 临时 SQLite——**实例回收后会丢失**，适合演示，不适合生产
-- 向量语义检索依赖 torch 模型，无法上 serverless——自动降级为关键词 + 规则推荐
-- LLM key 在 Vercel 项目环境变量中配置 `CINE_LLM_API_KEY`（智谱 BigModel）
-
-### 部署步骤
-
-1. 推送仓库到 GitHub
-2. Vercel → New Project → 导入仓库（Root Directory 保持项目根，不要设为 cine/web）
-3. Environment Variables 添加 `CINE_LLM_API_KEY`
-4. Deploy（`vercel.json` 已配置 buildCommand / outputDirectory / 函数路由）
-
-### 本地开发
-
-```bash
-pip install -r requirements.txt
-cd cine/web && npm install && npm run build && cd ../..
-python -m uvicorn cine.main:app --port 8010
-```
-
-或直接运行 `start_server.bat`（Windows）。
-
-## 页面路由
-
-| 路由 | 说明 |
-|---|---|
-| `#/` | 首页：电影银河、心情快捷入口、口碑九强 |
-| `#/list` | 全部电影：地区 / 类型 / 排序筛选 |
-| `#/movie/:id` | 电影详情：海报、DNA 罗盘、口碑解读、评论、相似片 |
-| `#/chat` | 问影灵：AI 推荐选片 / 陪看讨论 |
-| `#/explore` | 探索档案：等级、徽章、收藏 |
-| `#/personality` | 电影人格测试 |
-| `#/login` | 登录 / 注册 |
-| `#/account` | 个人中心 |
-| `#/about` | 关于 |
-
-## API 概览
-
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/api/movies` | 电影列表（支持筛选/排序/分页） |
-| GET | `/api/movies/{id}` | 电影详情 |
-| GET | `/api/galaxy` | 银河星球数据 |
-| GET | `/api/search?q=` | 标题 + 短评全文检索 |
-| POST | `/api/chat` | AI 聊天（推荐 / 陪看） |
-| GET | `/api/personality/questions` | 人格测试题目 |
-| POST | `/api/personality/test` | 提交人格测试 |
-| GET | `/api/watch/opening` | AI 陪看开场 |
-| POST | `/api/auth/*` | 认证（游客 / 短信 / 注册 / 登录） |
-
-## License
-
-MIT
+五、应用理念
+影灵用人性化的多层筛选逻辑替代生硬的机器匹配：先读懂用户的需求，再匹配对高分电影数据库，最后结合大众真实口碑完成最终筛选，只为给用户推送最贴合观影需求的优质影片。影灵的核心，从来不是推“更多影片”，而是推“对的影片”。
